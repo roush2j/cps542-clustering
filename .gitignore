@@ -1,0 +1,6 @@
+# ignore binaries and artifacts from eclipse
+bin/
+doc/
+.project
+.classpath
+.settings
