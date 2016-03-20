@@ -63,6 +63,15 @@ public final class DataSet {
     }
 
     /**
+     * Calculate the (euclidean) distance between two tuples.
+     * 
+     * @see #distSq(int, int)
+     */
+    public double dist(int tupA, int tupB) {
+        return Math.sqrt(distSq(tupA, tupB));
+    }
+
+    /**
      * Calculate the (euclidean) distance^2 between two tuples, where one tuple
      * is stored in an external array.
      * 
@@ -79,6 +88,16 @@ public final class DataSet {
             distSq += d * d;
         }
         return distSq;
+    }
+
+    /**
+     * Calculate the (euclidean) distance between two tuples, where one tuple
+     * is stored in an external array.
+     * 
+     * @see #distSq(int, double[], int)
+     */
+    public double dist(int tupA, double[] dataB, int offB) {
+        return Math.sqrt(distSq(tupA, dataB, offB));
     }
 
     /**
@@ -99,5 +118,16 @@ public final class DataSet {
             distSq += d * d;
         }
         return distSq;
+    }
+    
+    /**
+     * Calculate the (euclidean) distance between two tuples stored in
+     * arbitrary arrays.
+     * 
+     * @see #distSq(double[], int, double[], int, int) 
+     */
+    public static double dist(double[] dataA, int idxA, double[] dataB,
+            int idxB, int attrc) {
+        return Math.sqrt(distSq(dataA, idxA, dataB, idxB, attrc));
     }
 }
