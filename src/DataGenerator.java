@@ -17,9 +17,7 @@ public class DataGenerator {
 	 * a random value for each dimension of the n-dimensional space.
 	 */
 	public static double[][] generatePoints(double[][] centers, double radius, double pointCount, int noiseThreshold) {
-		if (noiseThreshold < 1) {
-			throw new IllegalArgumentException();
-		}
+		if (noiseThreshold < 1) throw new IllegalArgumentException();
 		
 		ArrayList<double[]> points = new ArrayList<>();
 		Random rng = new Random();
@@ -100,6 +98,62 @@ public class DataGenerator {
 			
 			writer.flush();
 			writer.close();
+		}
+	}
+	
+	/**
+	 * Generates the specified number of n-dimensional clusters with each cluster spaced within
+	 * the specified distance range from its nearest neighbor.
+	 * @param number The number of centers to generate.
+	 * @param dimensions The number of dimensions in each point.
+	 * @param minDistance The minimum distance from the nearest neighbor.
+	 * @param maxDistance The maximum distance from the nearest neighbor.
+	 * @return A collection of n-dimensional cluster center points.
+	 */
+	public static double[][] generateCenters(int number, int dimensions, double minDistance, double maxDistance) {
+		ArrayList<double[]> centers = new ArrayList<>();
+		double[] lastCenter = new double[dimensions];
+		Random rng = new Random();
+		
+		for (int centerId = 0; centerId < number; centerId++) {
+			double[] newCenter = new double[dimensions];
+			
+			for (int attribute = 0; attribute < dimensions; attribute++) {
+				double delta = (1 - rng.nextDouble()) * (maxDistance - minDistance) + minDistance;
+				
+				lastCenter[attribute] += delta;
+				newCenter[attribute] = lastCenter[attribute];
+			}
+			
+			centers.add(newCenter);
+		}
+		
+		return centers.toArray(new double[1][1]);
+	}
+	
+	/**
+	 * Normalizes a collection of points so that each point's attributes fall within the specified
+	 * range.
+	 * @param points The points to normalize.
+	 * @param newMin The minimum value in the target range.
+	 * @param newMax The maximum value in the target range.
+	 */
+	public static void normalizePoints(double[][] points, double newMin, double newMax) {
+		double min = Double.MAX_VALUE;
+		double max = Double.MIN_VALUE;
+		double newRange = newMax - newMin;
+		
+		for (double[] point : points) {
+			for (double value : point) {
+				if (value < min) min = value;
+				if (value > max) max = value;
+			}
+		}
+		
+		for (double[] point : points) {
+			for (int attrIdx = 0; attrIdx < point.length; attrIdx++) {
+				point[attrIdx] = (point[attrIdx] - min) * newRange + newMin;
+			}
 		}
 	}
 }
