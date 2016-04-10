@@ -60,7 +60,7 @@ public class kMedoids extends Clustering
 		//current cost to assign a point to a cluster
 		double currentPointCost;
 		//previous run's value
-		double previousRunCost = Integer.MAX_VALUE;
+		double previousRunCost = -1;
 		//current run's value
 		double currentRunCost;
 		/*
@@ -114,7 +114,15 @@ public class kMedoids extends Clustering
 			 * if it is better, assign best centers, the initial medoid values
 			 * and assign currentRunCost to previousRunCost
 			 */
-			if(currentRunCost < previousRunCost)
+			if(previousRunCost == -1)
+			{
+				for(int i=0; i<medoids.length; i++)
+				{
+					bestCenters[i] = medoids[i];
+				}
+				previousRunCost = currentRunCost;
+			}
+			else if(currentRunCost < previousRunCost)
 			{
 				for(int i=0; i<medoids.length; i++)
 				{
