@@ -1,3 +1,4 @@
 #! /bin/sh
+mkdir -p bin
 javac -classpath "DebugUtils.jar" -d bin/ src/*.java
 java -classpath "./bin:DebugUtils.jar" -javaagent:DebugUtils.jar Main
