@@ -1,9 +1,28 @@
-package semesterProject;
 
 import java.io.*;
 import java.util.*;
 
 public class DataGenerator {
+    public static void test() {
+        final int dims = 2, clcnt = 10, ptcnt = 10, clns = 1;
+        final double cldist = 3.0, clrad = 1.0;
+
+        double[][] centers = DataGenerator.generateCenters(clcnt, dims, cldist,
+                2 * cldist);
+        double[][] points = DataGenerator.generatePoints(centers, clrad, ptcnt,
+                clns);
+
+        try {
+            DataGenerator.writeToFile(points, "datagen.out", "\t", true);
+            new PrintStream("datagen.meta").format("set title '"
+                    + "%s: Random Clusters (%dD, centers min %.2f - max %.2f, "
+                    + "%dpts @rad=%.2f, noise=%d)'", DataGenerator.class, dims,
+                    cldist, 2 * cldist, ptcnt, clrad, clns);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+    
 	/**
 	 * Creates a collection of n-dimensional points that are normally distributed around the 
 	 * specified cluster centers within a specified distance of the cluster center.
