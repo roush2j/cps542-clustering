@@ -1,0 +1,15 @@
+#!/bin/bash
+A=100
+B=10
+gnuplot -p <<- EOP
+    set terminal wxt size 800,450
+    set title '${1}'
+    set xlabel "Number of tuples"
+    set ylabel "Runtime (ms)"
+    set y2label "Memory Useage (kB)"
+    set key top left reverse Left
+    set style line 1 lc rgb 'green' pt 5
+    set style line 2 lc rgb 'blue' pt 7
+    plot '${1}' using 1:(\$4/1000000) title "Runtime" ls 1;
+    replot '${1}' using 1:(\$5/1024) title "Memory" ls 2 axes x1y2;
+EOP

@@ -1,0 +1,10 @@
+#!/bin/bash
+A=100
+B=10
+gnuplot -p <<- EOP
+    set terminal wxt size 800,450
+    set title 'Clustering'
+    set xlabel 'd1'
+    set xlabel 'd2'
+    plot '< paste ${1}.dataset ${1}.${2}' using 2:3:5 with points pointtype 7 pointsize 0.3 palette notitle;
+EOP

@@ -1,13 +1,23 @@
-import java.io.PrintStream;
-import java.util.Random;
+import java.io.*;
+import java.util.*;
 import net.jroush.profiling.SizeOf;
 
-public abstract class AlgorithmTests {
+public class AlgorithmTests {
 
-    protected final Random rand = new Random();
+    protected final Map<String, ClusteringAlgo> algos = new HashMap<>();
 
-    public abstract Clustering getClustering(DataSet data, int clCnt,
-            double clRad);
+    protected Random                            rand  = new Random();
+
+    public AlgorithmTests() {}
+
+    @FunctionalInterface public static interface ClusteringAlgo {
+
+        Clustering apply(DataSet data, Random rng, int clCnt);
+    }
+
+    public void addAlgorithm(String name, ClusteringAlgo algo) {
+        algos.put(name, algo);
+    }
 
     public DataGenerator.GeneratedData genData(int attrCnt, int tupCnt,
             int clCnt, double clRad) {
@@ -18,8 +28,19 @@ public abstract class AlgorithmTests {
         return g.generate(tupCnt);
     }
 
-    public void tuplePerf(PrintStream p, int attrCnt, int maxtup, int clCnt,
-            int maxrep, double maxtime) {
+    public void perfTests() throws IOException {
+        for (Map.Entry<String, ClusteringAlgo> t : algos.entrySet()) {
+            String name = t.getKey();
+            ClusteringAlgo algo = t.getValue();
+            tuplePerf(name, algo, 4, 10000, 10, 10000, 1.0);
+            attrPerf(name, algo, 25, 1000, 10, 10000, 1.0);
+            clusPerf(name, algo, 4, 1000, 100, 10000, 1.0);
+        }
+    }
+
+    public void tuplePerf(String name, ClusteringAlgo algo, int attrCnt,
+            int maxtup, int clCnt, int maxrep, double maxtime)
+            throws IOException {
 
         // for efficiency, we pre-generate one huge data set
         double clrad = 0.5 / clCnt;
@@ -31,6 +52,7 @@ public abstract class AlgorithmTests {
         sizeof.ignoredObjects.addAll(sizeof.deepSizeMap(g).entrySet());
 
         // description and header
+        PrintStream p = new PrintStream(name + ".tupleperf");
         p.println("# Performance Testing - Tuple Count");
         p.println("TupleCount\tRepeats\tTime(ns)\tTimePerRep(ns)\tMem(bytes)");
 
@@ -48,7 +70,7 @@ public abstract class AlgorithmTests {
             long end = begin + (long) (maxtime * 1e9 + 0.5);
             int rep = 0;
             for (; rep < maxrep && System.nanoTime() < end; rep++) {
-                cl = getClustering(dataSlice, clCnt, clrad);
+                cl = algo.apply(dataSlice, rand, clCnt);
             }
             long dur = System.nanoTime() - begin;
             p.print(rep);
@@ -64,14 +86,17 @@ public abstract class AlgorithmTests {
             p.println();
             if (rep == 1) break;
         }
+        p.close();
     }
 
-    public void attrPerf(PrintStream p, int maxAttr, int tupCnt, int clCnt,
-            int maxrep, double maxtime) {
+    public void attrPerf(String name, ClusteringAlgo algo, int maxAttr,
+            int tupCnt, int clCnt, int maxrep, double maxtime)
+            throws IOException {
 
         double clrad = 0.5 / clCnt;
 
         // description and header
+        PrintStream p = new PrintStream(name + ".attrperf");
         p.println("# Performance Testing - Attribute Count");
         p.println("AttrCount\tRepeats\tTime(ns)\tTimePerRep(ns)\tMem(bytes)");
 
@@ -93,7 +118,7 @@ public abstract class AlgorithmTests {
             long end = begin + (long) (maxtime * 1e9 + 0.5);
             int rep = 0;
             for (; rep < maxrep && System.nanoTime() < end; rep++) {
-                cl = getClustering(g.data, clCnt, clrad);
+                cl = algo.apply(g.data, rand, clCnt);
             }
             long dur = System.nanoTime() - begin;
             p.print(rep);
@@ -109,12 +134,15 @@ public abstract class AlgorithmTests {
             p.println();
             if (rep == 1) break;
         }
+        p.close();
     }
 
-    public void clusPerf(PrintStream p, int attrCnt, int tupCnt, int maxclus,
-            int maxrep, double maxtime) {
+    public void clusPerf(String name, ClusteringAlgo algo, int attrCnt,
+            int tupCnt, int maxclus, int maxrep, double maxtime)
+            throws IOException {
 
         // description and header
+        PrintStream p = new PrintStream(name + ".clusperf");
         p.println("# Performance Testing - Cluster Count");
         p.println("ClusterCount\tRepeats\tTime(ns)\tTimePerRep(ns)\tMem(bytes)");
 
@@ -138,7 +166,7 @@ public abstract class AlgorithmTests {
             long end = begin + (long) (maxtime * 1e9 + 0.5);
             int rep = 0;
             for (; rep < maxrep && System.nanoTime() < end; rep++) {
-                cl = getClustering(g.data, cluscnt, clrad);
+                cl = algo.apply(g.data, rand, cluscnt);
             }
             long dur = System.nanoTime() - begin;
             p.print(rep);
@@ -154,11 +182,22 @@ public abstract class AlgorithmTests {
             p.println();
             if (rep == 1) break;
         }
+        p.close();
     }
 
-    public void quality(PrintStream p, int maxattr, int maxtup, int maxclus) {
+    public void qualityTests() throws IOException {
+        for (Map.Entry<String, ClusteringAlgo> t : algos.entrySet()) {
+            String name = t.getKey();
+            ClusteringAlgo algo = t.getValue();
+            quality(name, algo, 6, 1000, 20);
+        }
+    }
+
+    public void quality(String name, ClusteringAlgo algo, int maxattr,
+            int maxtup, int maxclus) throws IOException {
 
         // description and header
+        PrintStream p = new PrintStream(name + ".quality");
         p.println("# Quality Testing");
         p.print("AttrCount\tTupleCount\tClusterCount\t");
         p.print("FoundClusters\t");
@@ -187,7 +226,7 @@ public abstract class AlgorithmTests {
                     p.print('\t');
 
                     // analysis
-                    Clustering cl = getClustering(dataSlice, cluscnt, clrad);
+                    Clustering cl = algo.apply(dataSlice, rand, cluscnt);
                     p.print(cl.clusterCount());
                     p.print('\t');
                     BCubed bc = new BCubed(g, cl); // automatically slices
@@ -200,5 +239,32 @@ public abstract class AlgorithmTests {
                 }
             }
         }
+        p.close();
+    }
+
+    public void commonDataTest() throws IOException {
+        final int npts = 10000, nclus = 10;
+        DataGenerator g = new DataGenerator(rand, 2);
+        g.add(g.whiteNoiseBox().size(3).density(0.1));
+        g.add(g.uniformSphere().density(1).pos(0.5, 1).size(0.4, 0.8));
+        g.add(g.uniformSphere().density(1).pos(1.5, 1).size(0.4, 0.2));
+        g.add(g.normalSphere().density(1).pos(1, -1).size(0.1, 0.3));
+        g.addGroup(nclus, g.normalSphere().density(1),
+                g.whiteNoiseBox().pos(-1, 0).size(0.5, 1.0), g.normalSphere()
+                        .pos(0.25 / nclus).size(0.05 / nclus));
+        DataGenerator.GeneratedData gc = g.generate(npts);
+
+        gc.data.print(bufferedFileout("testdata.dataset"));
+        gc.print(bufferedFileout("testdata.truth"));
+
+        for (Map.Entry<String, ClusteringAlgo> t : algos.entrySet()) {
+            Clustering cl = t.getValue().apply(gc.data, rand, nclus + 3);
+            cl.print(bufferedFileout("testdata." + t.getKey()));
+        }
+    }
+
+    private static PrintStream bufferedFileout(String name) throws IOException {
+        return new PrintStream(new BufferedOutputStream(new FileOutputStream(
+                name)), false);
     }
 }
