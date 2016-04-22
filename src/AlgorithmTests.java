@@ -245,20 +245,17 @@ public class AlgorithmTests {
     public void commonDataTest() throws IOException {
         final int npts = 10000, nclus = 10;
         DataGenerator g = new DataGenerator(rand, 2);
-        g.add(g.whiteNoiseBox().size(3).density(0.1));
-        g.add(g.uniformSphere().density(1).pos(0.5, 1).size(0.4, 0.8));
-        g.add(g.uniformSphere().density(1).pos(1.5, 1).size(0.4, 0.2));
-        g.add(g.normalSphere().density(1).pos(1, -1).size(0.1, 0.3));
+        g.add(g.whiteNoiseBox().density(0.1));
         g.addGroup(nclus, g.normalSphere().density(1),
-                g.whiteNoiseBox().pos(-1, 0).size(0.5, 1.0), g.normalSphere()
-                        .pos(0.25 / nclus).size(0.05 / nclus));
+                g.whiteNoiseBox().size(0.8),
+                g.normalSphere().pos(0.2 / nclus).size(0.05 / nclus));
         DataGenerator.GeneratedData gc = g.generate(npts);
 
         gc.data.print(bufferedFileout("testdata.dataset"));
         gc.print(bufferedFileout("testdata.truth"));
 
         for (Map.Entry<String, ClusteringAlgo> t : algos.entrySet()) {
-            Clustering cl = t.getValue().apply(gc.data, rand, nclus + 3);
+            Clustering cl = t.getValue().apply(gc.data, rand, nclus);
             cl.print(bufferedFileout("testdata." + t.getKey()));
         }
     }

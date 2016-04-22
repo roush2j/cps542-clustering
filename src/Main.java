@@ -20,8 +20,8 @@ public class Main {
             return new kMedoids(data, clCnt);
         });
 
-        tests.perfTests();
-        tests.qualityTests();
+        //tests.perfTests();
+        //tests.qualityTests();
         tests.commonDataTest();
     }
 }
