@@ -1,3 +1,6 @@
+import java.util.Arrays;
+import java.util.Random;
+
 public class DBSCAN extends Clustering {
 
     private final int[]  mapping;
@@ -10,13 +13,71 @@ public class DBSCAN extends Clustering {
 
     public DBSCAN(DataSet data, double eps, int minPts) {
         super(data);
-        final int tupc = data.tupleCnt;
-        final double epssq = eps * eps;
+        this.mapping = new int[data.tupleCnt];
+        this.tupqueue = new int[data.tupleCnt];
+        this.clusterCnt = dbscan(data, eps, minPts);
         this.desc = String.format("%s(eps=%.3f, minpts=%d)", getClass()
                 .getSimpleName(), eps, minPts);
+    }
 
-        this.mapping = new int[tupc];
-        this.tupqueue = new int[tupc];
+    public DBSCAN(DataSet data, Random rng) {
+        super(data);
+        this.mapping = new int[data.tupleCnt];
+        this.tupqueue = new int[data.tupleCnt];
+
+        final int maxn = 30;
+        final int tupx = Math.min(data.tupleCnt, 100);
+        final int samp = Math.min(data.tupleCnt, maxn * 20);
+
+        double[] avgdist = new double[maxn];
+        double[] dist = new double[maxn];
+        for (int i = 0; i < tupx; i++) {
+            Arrays.fill(dist, Double.POSITIVE_INFINITY);
+            final int t = rng.nextInt(data.tupleCnt);
+            for (int j = 0; j < samp; j++) {
+                final int q = rng.nextInt(data.tupleCnt);
+                double d2 = data.distSq(t, q);
+                int ins = Arrays.binarySearch(dist, d2);
+                if (ins < 0) ins = -ins - 1;
+                if (ins >= maxn) continue;
+                System.arraycopy(dist, ins, dist, ins + 1, maxn - ins - 1);
+                dist[ins] = d2;
+            }
+            for (int k = 0; k < maxn; k++) {
+                avgdist[k] += Math.sqrt(dist[k]);
+            }
+        }
+
+        double maxacc = Double.NEGATIVE_INFINITY;
+        int maxk = 0;
+        for (int k = 2; k < maxn - 1; k++) {
+            // second-order finite difference of avgDist to k nearest neighbors
+            double acc = avgdist[k - 1] - 2 * avgdist[k] + avgdist[k + 1];
+            if (acc > maxacc) {
+                maxacc = acc;
+                maxk = k;
+            }
+        }
+        if (Double.isInfinite(maxacc)) {
+            // sane defaults in case of failure
+            this.clusterCnt = dbscan(data, 0.5, 10);
+            this.desc = String.format("%s(auto FAILED)", getClass()
+                    .getSimpleName());
+        } else {
+            double eps = avgdist[maxk] / tupx;
+            int minpts = (int) Math.ceil(maxk * 0.15 * data.tupleCnt / tupx);
+            this.clusterCnt = dbscan(data, eps, minpts);
+            this.desc = String.format("%s(auto eps=%.3f, minpts=%d)",
+                    getClass().getSimpleName(), eps, minpts);
+        }
+    }
+
+    private int dbscan(DataSet data, double eps, int minPts) {
+        final int tupc = data.tupleCnt;
+        final double epssq = eps * eps;
+        assert (mapping.length >= tupc);
+        assert (tupqueue.length >= tupc);
+
         int clustercnt = 0;
         for (int i = 0; i < tupc; i++) {
             if (mapping[i] != 0) continue;
@@ -60,7 +121,7 @@ public class DBSCAN extends Clustering {
             }
         }
 
-        this.clusterCnt = clustercnt;
+        return clustercnt;
     }
 
     @Override public int tupleCount() {

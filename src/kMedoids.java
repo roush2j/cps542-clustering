@@ -197,7 +197,7 @@ public class kMedoids extends Clustering
 				ID = i;
 			}
 		}
-		return ID;
+		return ID + 1;
 	}
 	
 	public void printClusterCenters()

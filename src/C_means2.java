@@ -162,7 +162,6 @@ public class C_means2 extends Clustering
 				runNumber++;
 			}
 		}
-		System.out.println("Completed calculations in " + runNumber + " iterations");
 	}
 	
 	private void initializeMstep(double[][] m, int dataSize)
