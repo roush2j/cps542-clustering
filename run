@@ -1,0 +1,2 @@
+#! /bin/sh
+java -classpath "./bin:DebugUtils.jar" -javaagent:DebugUtils.jar Main
