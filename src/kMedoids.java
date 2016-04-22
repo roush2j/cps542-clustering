@@ -213,4 +213,11 @@ public class kMedoids extends Clustering
 		}
 	}
 
+    @Override public int tupleCount() {
+        return cost.length;
+    }
+
+    @Override public String toString() {
+        return "KMedoids";
+    }
 }

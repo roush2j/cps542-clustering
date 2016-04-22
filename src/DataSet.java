@@ -1,3 +1,5 @@
+import java.io.PrintStream;
+
 /**
  * A wrapper class for data sets. Each data set is a (possibly large) sequence
  * of tuples, each tuple having some (small) number of attributes.
@@ -91,8 +93,8 @@ public final class DataSet {
     }
 
     /**
-     * Calculate the (euclidean) distance between two tuples, where one tuple
-     * is stored in an external array.
+     * Calculate the (euclidean) distance between two tuples, where one tuple is
+     * stored in an external array.
      * 
      * @see #distSq(int, double[], int)
      */
@@ -119,15 +121,44 @@ public final class DataSet {
         }
         return distSq;
     }
-    
+
     /**
-     * Calculate the (euclidean) distance between two tuples stored in
-     * arbitrary arrays.
+     * Calculate the (euclidean) distance between two tuples stored in arbitrary
+     * arrays.
      * 
-     * @see #distSq(double[], int, double[], int, int) 
+     * @see #distSq(double[], int, double[], int, int)
      */
     public static double dist(double[] dataA, int idxA, double[] dataB,
             int idxB, int attrc) {
         return Math.sqrt(distSq(dataA, idxA, dataB, idxB, attrc));
+    }
+
+    /**
+     * Print a multi-line textual representation of the data set.
+     */
+    public void print(PrintStream p) {
+        // description
+        p.print("# ");
+        p.println(toString());
+
+        // header row
+        p.print("TupleID");
+        for (int k = 0; k < attrCnt; k++) {
+            p.print('\t');
+            p.print('d');
+            p.print(k + 1);
+        }
+        p.println();
+
+        // tuples
+        for (int t = 0; t < tupleCnt; t++) {
+            p.print(t + 1);
+            for (int k = 0; k < attrCnt; k++) {
+                p.print('\t');
+                p.format("%7.3f", getAttr(t, k));
+            }
+            p.println();
+        }
+        p.flush();
     }
 }

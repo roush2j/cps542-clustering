@@ -1,51 +1,70 @@
 public class DBSCAN extends Clustering {
 
-    private final int[] mapping;
-    
-    private final int[] tupstack;
+    private final int[]  mapping;
 
-    private final int   clusterCnt;
+    private final int[]  tupqueue;
+
+    private final int    clusterCnt;
+
+    private final String desc;
 
     public DBSCAN(DataSet data, double eps, int minPts) {
         super(data);
         final int tupc = data.tupleCnt;
         final double epssq = eps * eps;
-        
+        this.desc = String.format("%s(eps=%.3f, minpts=%d)", getClass()
+                .getSimpleName(), eps, minPts);
+
         this.mapping = new int[tupc];
-        this.tupstack = new int[tupc];
+        this.tupqueue = new int[tupc];
         int clustercnt = 0;
         for (int i = 0; i < tupc; i++) {
             if (mapping[i] != 0) continue;
-            
-            tupstack[0] = i;
-            int clpop = 0, stacktop = 1;
-            int clid = clustercnt + 1;
-            while (stacktop > 0) {
-                int j = tupstack[--stacktop];
-                mapping[j] = clid;
-                
-                // push all unvisited neighboring points onto the stack
-                int neighborpop = 0;
+
+            int qbot = 0, qtop = 1;
+            tupqueue[0] = i;
+            mapping[i] = ++clustercnt;
+            while (qbot < qtop) {
+                // pop next point off of queue
+                int j = tupqueue[qbot++];
+
+                // find all neighbors of this point
+                int qneigh = qtop, dupNeighbors = 0;
                 for (int k = 0; k < tupc; k++) {
                     if (mapping[k] == 0 && data.distSq(j, k) <= epssq) {
-                        tupstack[stacktop++] = k;
-                        neighborpop++;
-                    } else if (mapping[k] == clid) {
-                        neighborpop++;
+                        // newly reachable neighbor
+                        tupqueue[qtop++] = k;
+                        mapping[k] = clustercnt;
+                    } else if (mapping[k] == clustercnt
+                            && data.distSq(j, k) <= epssq) {
+                        // previously reached neighbor
+                        dupNeighbors++;
                     }
                 }
-
-                // only include neighbors of core points
-                if (neighborpop < minPts) stacktop -= neighborpop;
-                else clpop += neighborpop;
+                if (dupNeighbors + (qtop - qneigh) < minPts) {
+                    // not enough neighbors to be a core point, 
+                    // drop neighbors from queue
+                    for (int q = qneigh; q < qtop; q++) {
+                        mapping[tupqueue[q]] = 0;
+                    }
+                    qtop = qneigh;
+                }
             }
-            
+
             // clusters can only be seeded by core points
-            if (clpop < minPts) mapping[i] = 0;
-            else clustercnt++;
+            if (qtop < minPts) {
+                for (int q = 0; q < qtop; q++) {
+                    mapping[tupqueue[q]] = 0;
+                }
+                clustercnt--;
+            }
         }
-        
+
         this.clusterCnt = clustercnt;
+    }
+
+    @Override public int tupleCount() {
+        return mapping.length;
     }
 
     @Override public int clusterCount() {
@@ -54,5 +73,9 @@ public class DBSCAN extends Clustering {
 
     @Override public int clusterID(int tuple) {
         return mapping[tuple];
+    }
+
+    @Override public String toString() {
+        return desc;
     }
 }

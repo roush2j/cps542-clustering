@@ -216,5 +216,12 @@ public class C_means2 extends Clustering
 			}
 		}
 	}
-	
+
+    @Override public int tupleCount() {
+        return MStep[0].length;
+    }
+
+    @Override public String toString() {
+        return "CMeans";
+    }
 }
