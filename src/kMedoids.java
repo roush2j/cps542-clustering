@@ -192,7 +192,7 @@ public class kMedoids extends Clustering
 		int ID = -1;
 		for(int i=0; i<numClusters; i++)
 		{
-			if(cost[tuple][i] < minHere)
+			if(cost[i][tuple] < minHere)
 			{
 				ID = i;
 			}
@@ -214,7 +214,7 @@ public class kMedoids extends Clustering
 	}
 
     @Override public int tupleCount() {
-        return cost.length;
+        return cost[0].length;
     }
 
     @Override public String toString() {
