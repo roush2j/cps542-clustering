@@ -1,178 +1,285 @@
-
-import java.io.*;
 import java.util.*;
 
 public class DataGenerator {
-    public static void test() {
-        final int dims = 2, clcnt = 10, ptcnt = 10, clns = 1;
-        final double cldist = 3.0, clrad = 1.0;
 
-        double[][] centers = DataGenerator.generateCenters(clcnt, dims, cldist,
-                2 * cldist);
-        double[][] points = DataGenerator.generatePoints(centers, clrad, ptcnt,
-                clns);
+    private final Random          rng;
 
-        try {
-            DataGenerator.writeToFile(points, "datagen.out", "\t", true);
-            new PrintStream("datagen.meta").format("set title '"
-                    + "%s: Random Clusters (%dD, centers min %.2f - max %.2f, "
-                    + "%dpts @rad=%.2f, noise=%d)'", DataGenerator.class, dims,
-                    cldist, 2 * cldist, ptcnt, clrad, clns);
-        } catch (Exception e) {
-            e.printStackTrace();
+    private final int             attrc;
+
+    private final List<Generator> generators;
+
+    public DataGenerator(Random rng, int attrCnt) {
+        this.rng = rng;
+        this.attrc = attrCnt;
+        this.generators = new ArrayList<>();
+    }
+
+    public DataGenerator add(Generator... generators) {
+        this.generators.addAll(Arrays.asList(generators));
+        return this;
+    }
+
+    public DataGenerator addGroup(int count, Generator template,
+            Generator centers, Generator sizes) {
+        double[] scratch = new double[2 * attrc];
+        for (int i = 0; i < count; i++) {
+            Generator g = template.clone();
+            centers.generate(scratch, 0);
+            sizes.generate(scratch, attrc);
+            for (int k = 0; k < attrc; k++) {
+                g.pos[k] += scratch[k];
+                g.size[k] *= scratch[attrc + k];
+            }
+            generators.add(g);
+        }
+        return this;
+    }
+
+    public GeneratedData generate(int tupleCnt) {
+        // gather cluster max densities
+        double totGenPop = 0;
+        for (Generator g : generators) {
+            totGenPop += g.population();
+        }
+
+        // build mapping for pulling a random generator
+        int gencnt = generators.size();
+        int[] genClId = new int[gencnt];
+        int totClCnt = 0;
+        int[] genRnd = new int[gencnt];
+        int totTupCnt = 0;
+        for (int g = 0; g < gencnt; g++) {
+            genClId[g] = totClCnt;
+            totClCnt += generators.get(g).clusterCount();
+            double adjPop = generators.get(g).population() / totGenPop;
+            totTupCnt += (int) Math.round(tupleCnt * adjPop);
+            genRnd[g] = totTupCnt;
+        }
+        genRnd[gencnt - 1] = tupleCnt;
+
+        // generate data
+        double[] flatData = new double[tupleCnt * attrc];
+        int[] tupMapping = new int[tupleCnt];
+        for (int t = 0, toff = 0; t < tupleCnt; t++, toff += attrc) {
+            int g = Arrays.binarySearch(genRnd, rng.nextInt(tupleCnt));
+            if (g < 0) g = -g - 1;
+            int cl = generators.get(g).generate(flatData, toff);
+            tupMapping[t] = cl > 0 ? genClId[g] + cl : 0;
+        }
+        DataSet data = new DataSet(tupleCnt, attrc, flatData);
+
+        return new GeneratedData(data, tupMapping, totClCnt);
+    }
+
+    public class GeneratedData extends Clustering {
+
+        public final DataSet data;
+
+        private final int[]  tupMapping;
+
+        private final int    clCnt;
+
+        private GeneratedData(DataSet data, int[] tupMapping, int clCnt) {
+            super(data);
+            this.data = data;
+            this.tupMapping = tupMapping;
+            this.clCnt = clCnt;
+        }
+
+        @Override public int tupleCount() {
+            return tupMapping.length;
+        }
+
+        @Override public int clusterCount() {
+            return clCnt;
+        }
+
+        @Override public int clusterID(int tuple) {
+            return tupMapping[tuple];
+        }
+
+        @Override public String toString() {
+            StringBuilder desc = new StringBuilder("GeneratedData ");
+            desc.append(attrc);
+            desc.append("D ");
+            for (Generator g : generators) {
+                if (desc.length() > 0) desc.append(", ");
+                desc.append(g.toString());
+            }
+            return desc.toString();
         }
     }
-    
-	/**
-	 * Creates a collection of n-dimensional points that are normally distributed around the 
-	 * specified cluster centers within a specified distance of the cluster center.
-	 * @param centers The centers around which to cluster the points.
-	 * @param radius The maximum distance from each point to its cluster center.
-	 * @param pointCount The number of points contained in each cluster.
-	 * @param noiseThreshold The standard deviation value that indicates whether a point should
-	 * be considered a cluster point or a noise point.
-	 * @return An array containing the following values:  the cluster number to which the point
-	 * belongs, 0.0 if the point is a cluster point or 1.0 if the point is a noise point, plus
-	 * a random value for each dimension of the n-dimensional space.
-	 */
-	public static double[][] generatePoints(double[][] centers, double radius, double pointCount, int noiseThreshold) {
-		if (noiseThreshold < 1) throw new IllegalArgumentException();
-		
-		ArrayList<double[]> points = new ArrayList<>();
-		Random rng = new Random();
-		double maxRandom = Double.MAX_VALUE / radius * (double)noiseThreshold;
-		double minRandom = maxRandom * -1;
-		
-		for (int centerIndex = 0; centerIndex < centers.length; centerIndex++) {
-			double[] center = centers[centerIndex];
-			
-			for (int pointNumber = 0; pointNumber < pointCount; pointNumber++) {
-				double[] values = new double[center.length + 2];
-				boolean noisePoint = false;
-				
-				// First two elements are for cluster ID and noise flag.
-				for (int valueIndex = 2; valueIndex < values.length; valueIndex++) {
-					double random = rng.nextGaussian();
-					
-					// Make sure random number isn't an edge case that will cause an exception.
-					if (random < minRandom || random > maxRandom) {
-						System.out.println("Out of range.");
-						pointNumber--;
-					} else {
-						values[valueIndex] = center[valueIndex - 2] + (random / noiseThreshold * radius);
-						
-						if (random >= noiseThreshold) {
-							noisePoint = true;
-							pointNumber--; // Create a new cluster point to replace this one.
-						}
-					}
-				}
-				
-				values[0] = centerIndex + 1;
-				values[1] = noisePoint ? 1 : 0;
-				points.add(values);
-			}
-		}
 
-		return points.toArray(new double[1][1]);
-	}
-	
-	/**
-	 * Writes the specified points to the specified file.
-	 * @param points The points to write to the file.
-	 * @param filePath The file's path.
-	 * @param delimiter The character to use to separate the values.
-	 * @param includeMetaData Indicates whether the point's cluster and noise status should be
-	 * written to the file.
-	 * @throws Exception If the points cannot be written to the file.
-	 */
-	public static void writeToFile(double[][] points, String filePath, String delimiter, boolean includeMetaData) throws Exception {
-		if (points.length > 0) {
-			PrintWriter writer = new PrintWriter(new File(filePath));
-			
-			// Write the header.
-			if (includeMetaData) {
-				writer.write("Cluster" + delimiter + "Noise" + delimiter);
-			}
-			
-			for (int i = 2; i < points[0].length; i++) {
-				writer.write("V" + (i - 1));
-				if (i < points[0].length - 1) writer.write(delimiter);
-				else writer.write(System.lineSeparator());
-			}
-			
-			// Write each point.
-			for (double[] point : points) {
-				if (includeMetaData) {
-					writer.write(String.format("%d%s%d%s", (int)point[0], delimiter, (int)point[1], delimiter));
-				}
-				
-				for (int i = 2; i < point.length; i++) {
-					writer.write(String.format("%f", point[i]));
-					
-					if (i < point.length - 1) writer.write(delimiter);
-					else writer.write(System.lineSeparator());
-				}
-			}
-			
-			writer.flush();
-			writer.close();
-		}
-	}
-	
-	/**
-	 * Generates the specified number of n-dimensional clusters with each cluster spaced within
-	 * the specified distance range from its nearest neighbor.
-	 * @param number The number of centers to generate.
-	 * @param dimensions The number of dimensions in each point.
-	 * @param minDistance The minimum distance from the nearest neighbor.
-	 * @param maxDistance The maximum distance from the nearest neighbor.
-	 * @return A collection of n-dimensional cluster center points.
-	 */
-	public static double[][] generateCenters(int number, int dimensions, double minDistance, double maxDistance) {
-		ArrayList<double[]> centers = new ArrayList<>();
-		double[] lastCenter = new double[dimensions];
-		Random rng = new Random();
-		
-		for (int centerId = 0; centerId < number; centerId++) {
-			double[] newCenter = new double[dimensions];
-			
-			for (int attribute = 0; attribute < dimensions; attribute++) {
-				double delta = (1 - rng.nextDouble()) * (maxDistance - minDistance) + minDistance;
-				
-				lastCenter[attribute] += delta;
-				newCenter[attribute] = lastCenter[attribute];
-			}
-			
-			centers.add(newCenter);
-		}
-		
-		return centers.toArray(new double[1][1]);
-	}
-	
-	/**
-	 * Normalizes a collection of points so that each point's attributes fall within the specified
-	 * range.
-	 * @param points The points to normalize.
-	 * @param newMin The minimum value in the target range.
-	 * @param newMax The maximum value in the target range.
-	 */
-	public static void normalizePoints(double[][] points, double newMin, double newMax) {
-		double min = Double.MAX_VALUE;
-		double max = Double.MIN_VALUE;
-		double newRange = newMax - newMin;
-		
-		for (double[] point : points) {
-			for (double value : point) {
-				if (value < min) min = value;
-				if (value > max) max = value;
-			}
-		}
-		
-		for (double[] point : points) {
-			for (int attrIdx = 0; attrIdx < point.length; attrIdx++) {
-				point[attrIdx] = (point[attrIdx] - min) * newRange + newMin;
-			}
-		}
-	}
+    public abstract class Generator implements Cloneable {
+
+        protected double[] pos;
+
+        protected double[] size;
+
+        protected double   density;
+
+        protected Generator() {
+            this.pos = new double[attrc];
+            this.size = new double[attrc];
+            Arrays.fill(size, 1);
+            this.density = 1.0;
+        }
+
+        @Override protected Generator clone() {
+            try {
+                Generator g = (Generator) super.clone();
+                g.pos = this.pos.clone();
+                g.size = this.size.clone();
+                return g;
+            } catch (CloneNotSupportedException e) {
+                throw new RuntimeException("Impossible");
+            }
+        }
+
+        public Generator pos(double... x) {
+            if (x.length == 0 || attrc % x.length != 0)
+                throw new IllegalArgumentException("Position must have "
+                        + attrc + " elements or an integer fraction therof.");
+            for (int k = 0; k < attrc;) {
+                for (int i = 0; i < x.length && k < attrc; i++, k++) {
+                    pos[k] = x[i];
+                }
+            }
+            return this;
+        }
+
+        public Generator size(double... s) {
+            if (s.length == 0 || attrc % s.length != 0)
+                throw new IllegalArgumentException("Size must have " + attrc
+                        + " elements or an integer fraction therof.");
+            for (int k = 0; k < attrc;) {
+                for (int i = 0; i < s.length && k < attrc; i++, k++) {
+                    size[k] = s[i];
+                }
+            }
+            return this;
+        }
+
+        public Generator density(double d) {
+            this.density = d;
+            return this;
+        }
+
+        protected abstract int generate(double[] data, int doff);
+
+        protected abstract double population();
+
+        protected abstract int clusterCount();
+
+        @Override public String toString() {
+            return "(pos=" + Arrays.toString(pos) + ", size="
+                    + Arrays.toString(size) + ", den=" + density + ")";
+        }
+    }
+
+    public Generator whiteNoiseBox() {
+        return new Generator() {
+
+            @Override protected int generate(double[] data, int doff) {
+                // We sample each attribute independently from a normal dist.
+                // This produces the same result as sampling all attributes
+                // together from a multivariate normal distribution.
+                for (int k = 0; k < attrc; k++) {
+                    double x = (rng.nextDouble() * 2 - 1) * size[k];
+                    data[doff + k] = pos[k] + x;
+                }
+                return 0;
+            }
+
+            @Override protected double population() {
+                // Calculate the volume of an N-rectangle
+                double V = 1;
+                for (int k = 0; k < attrc; k++) {
+                    V *= 2 * size[k];
+                }
+                return density * V;
+            }
+
+            @Override protected int clusterCount() {
+                return 0;
+            }
+
+            @Override public String toString() {
+                return "WhiteNoiseBox" + super.toString();
+            }
+        };
+    }
+
+    public Generator normalSphere() {
+        return new Generator() {
+
+            @Override protected int generate(double[] data, int doff) {
+                // We sample each attribute independently from a normal dist.
+                // This produces the same result as sampling all attributes
+                // together from a multivariate normal distribution.
+                for (int k = 0; k < attrc; k++) {
+                    data[doff + k] = pos[k] + rng.nextGaussian() * size[k];
+                }
+                return 1;
+            }
+
+            @Override protected double population() {
+                double V2 = 1;
+                for (int k = 0; k < attrc; k++) {
+                    V2 *= 2 * Math.PI * size[k];
+                }
+                return density * Math.sqrt(V2);
+            }
+
+            @Override protected int clusterCount() {
+                return 1;
+            }
+
+            @Override public String toString() {
+                return "NormalSphere" + super.toString();
+            }
+        };
+    }
+
+    public Generator uniformSphere() {
+        return new Generator() {
+
+            @Override protected int generate(double[] data, int doff) {
+                // We sample each attribute normally (see normalSphere())
+                double r2 = 0;
+                for (int k = 0; k < attrc; k++) {
+                    double x = rng.nextGaussian();
+                    data[doff + k] = x;
+                    r2 += x * x;
+                }
+                // We then renormalize to a new radius generated 
+                // from a power-law distribution
+                double u = Math.pow(rng.nextDouble(), 1.0 / attrc);
+                u = (r2 > 0) ? u / Math.sqrt(r2) : 0;
+                for (int k = 0; k < attrc; k++) {
+                    data[doff + k] = pos[k] + data[doff + k] * u * size[k];
+                }
+                return 1;
+            }
+
+            @Override protected double population() {
+                double V = attrc % 2 == 0 ? Math.PI : 2.0;
+                for (int k = attrc; k > 2; k -= 2) {
+                    V *= 2 * Math.PI / k;
+                }
+                for (int k = 0; k < attrc; k++) {
+                    V *= size[k];
+                }
+                return density * V;
+            }
+
+            @Override protected int clusterCount() {
+                return 1;
+            }
+
+            @Override public String toString() {
+                return "UniformSphere" + super.toString();
+            }
+        };
+    }
 }
