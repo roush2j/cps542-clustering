@@ -3,17 +3,17 @@ import java.util.Random;
 
 public class kMedoids extends Clustering {
 
-    private final int      clusterCnt;
+    private final int        clusterCnt;
 
-    private final int[]    _medoids;
+    private final int[]      _medoids;
 
-    private final double[] _tmperrs;
+    private final double[]   _tmperrs;
 
-    private final int[]    mapping;
+    private final double[][] _dists;
 
-    private final int[]    _mappingx1, _mappingx2;
+    private final int[]      mapping;
 
-    private final String   desc;
+    private final String     desc;
 
     public kMedoids(DataSet data, int clusterCnt, int[] centers) {
         super(data);
@@ -23,19 +23,13 @@ public class kMedoids extends Clustering {
                 .getSimpleName(), clusc);
 
         final int[] medoids = this._medoids = Arrays.copyOf(centers, clusc);
-        final int[] mapping = this.mapping = new int[tupc];
         this._tmperrs = new double[clusc];
-        this._mappingx1 = new int[tupc];
-        this._mappingx2 = new int[tupc];
 
-        // initialize mappings
+        // initialize distance matrix
+        final double[][] dists = this._dists = new double[clusc + 2][tupc];
         for (int t = 0; t < tupc; t++) {
-            double minD2 = Double.POSITIVE_INFINITY;
             for (int c = 0; c < clusc; c++) {
-                double d2 = data.distSq(t, medoids[c]);
-                if (d2 >= minD2) continue;
-                minD2 = d2;
-                mapping[t] = c;
+                dists[c][t] = data.dist(medoids[c], t);
             }
         }
 
@@ -44,9 +38,7 @@ public class kMedoids extends Clustering {
         while (true) {
             int swapq = -1, swapc = -1;
             double swapErr = 0;
-            int[] swapmap = this._mappingx1;
-            double[] tmperrs = this._tmperrs;
-            int[] tmpmap = this._mappingx2;
+            double[] swapDist = this._dists[clusc];
 
             // loop over each non-medoid tuple and find the one with
             // largest benefit when swapping with one of the medoids
@@ -62,50 +54,43 @@ public class kMedoids extends Clustering {
                 // loop over each tuple to calculate the benefit
                 // of swapping medoids[c] -> q for each cluster c
                 //  tmperrs[c]  is running sum of change-in-err
-                //  tmpmap[t]   is a code for the new cluster ID (see below)
+                //  tmpdist[t]  is distance from t to q
+                double[] tmperrs = this._tmperrs;
                 Arrays.fill(tmperrs, 0);
+                double[] tmpdist = this._dists[clusc + 1];
                 for (int t = 0; t < tupc; t++) {
-                    int closest = mapping[t];
-                    double closestD2 = data.distSq(t, medoids[closest]);
-                    double swapD2 = data.distSq(t, q);
-                    if (swapD2 < closestD2) {
 
-                        // q is closer than current closest medoid
-                        // swapping q<->c will reduce the error for *any* c
-                        double derr = Math.sqrt(swapD2) - Math.sqrt(closestD2);
-                        for (int c = 0; c < clusc; c++) {
-                            tmperrs[c] += derr;
-                        }
-                        // new clusterID is whatever q gets swapped with 
-                        tmpmap[t] = -1;
-
-                    } else {
-
-                        // q is farther than current closest medoid
-                        // find second-closest medoid
-                        int secondClosest = -1;
-                        double secondClosestD2 = Double.POSITIVE_INFINITY;
-                        for (int c = 0; c < clusc; c++) {
-                            if (c == closest) continue;
-                            double d2 = data.distSq(t, medoids[c]);
-                            if (d2 >= secondClosestD2) continue;
-                            secondClosestD2 = d2;
+                    // find closest and second-closest cluster medoids
+                    int closest = -1, secondClosest = -1;
+                    double closestD = Double.POSITIVE_INFINITY;
+                    double secondClosestD = closestD;
+                    for (int c = 0; c < clusc; c++) {
+                        double d = dists[c][t];
+                        if (d < closestD) {
+                            secondClosestD = closestD;
+                            secondClosest = closest;
+                            closestD = d;
+                            closest = c;
+                        } else if (d < secondClosestD) {
+                            secondClosestD = d;
                             secondClosest = c;
                         }
-                        // error will be increased if we swap q <-> closest medoid
-                        double d = Math.sqrt(closestD2);
-                        if (swapD2 < secondClosestD2) {
-                            // q is closer than second closest medoid
-                            // new clusterID is always same as old cluster ID
-                            tmperrs[closest] += Math.sqrt(swapD2) - d;
-                            tmpmap[t] = closest;
-                        } else {
-                            // q is farther than second closest medoid
-                            // new clusterID is old cluster ID or second-closest
-                            // cluster ID, depending on what q replaces
-                            tmperrs[closest] += Math.sqrt(secondClosestD2) - d;
-                            tmpmap[t] = secondClosest;
+                    }
+
+                    // compare to proposed swap point q
+                    double swapD = tmpdist[t] = data.dist(q, t);
+                    if (swapD < closestD) {
+                        // q is closer than current closest medoid
+                        // swapping q<->c will reduce the error equally for all c
+                        for (int c = 0; c < clusc; c++) {
+                            tmperrs[c] += swapD - closestD;
                         }
+                    } else {
+                        // q is farther than current closest medoid
+                        // error will be changed (increased) only if we 
+                        // swap q <-> closest medoid
+                        secondClosestD = Math.min(swapD, secondClosestD);
+                        tmperrs[closest] += secondClosestD - closestD;
                     }
                 }
 
@@ -116,9 +101,11 @@ public class kMedoids extends Clustering {
                     swapErr = tmperrs[c];
                     swapq = q;
                     swapc = c;
-                    int[] t = swapmap;
-                    swapmap = tmpmap;
-                    tmpmap = t;
+                }
+                if (swapq == q) {
+                    double[] t = swapDist;
+                    swapDist = this._dists[clusc] = tmpdist;
+                    tmpdist = this._dists[clusc + 1] = t;
                 }
             }
 
@@ -129,18 +116,20 @@ public class kMedoids extends Clustering {
                 break;
             }
             medoids[swapc] = swapq;
+            double[] t = dists[swapc];
+            dists[swapc] = swapDist;
+            swapDist = this._dists[clusc] = t;
+        }
 
-            // update mapping
-            for (int t = 0; t < tupc; t++) {
-                if (swapmap[t] < 0) {
-                    // closest medoid is now q
-                    mapping[t] = swapc;
-                } else if (swapc == mapping[t]) {
-                    // we've replaced previous closest medoid
-                    mapping[t] = swapmap[t];
-                } else {
-                    // no change in closest medoid
-                }
+        // calculate mapping
+        final int[] mapping = this.mapping = new int[tupc];
+        for (int t = 0; t < tupc; t++) {
+            double minD = Double.POSITIVE_INFINITY;
+            for (int c = 0; c < clusc; c++) {
+                double d = dists[c][t];
+                if (d >= minD) continue;
+                minD = d;
+                mapping[t] = c;
             }
         }
     }
