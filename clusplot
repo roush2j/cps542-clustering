@@ -1,10 +1,36 @@
 #!/bin/bash
-A=100
-B=10
+datafile=${1}.dataset
+clusfile=${1}.${2}
+# extract title from the first line of the cluster file in the form "# TITLE(...)"
+title=$(sed '1q;d' $clusfile | tr '()' ' ' | awk '{ print $2 }')
 gnuplot -p <<- EOP
-    set terminal wxt size 800,450
-    set title 'Clustering'
-    set xlabel 'd1'
-    set xlabel 'd2'
-    plot '< paste ${1}.dataset ${1}.${2}' using 2:3:5 with points pointtype 7 pointsize 0.3 palette notitle;
+    # terminal
+    set terminal wxt size 600,600
+    set size square
+    
+    # colors
+    set palette defined ( \
+        0 '#222222',\
+        1 '#377EB8',\
+        2 '#4DAF4A',\
+        3 '#984EA3',\
+        4 '#FF7F00',\
+        5 '#FFFF33',\
+        6 '#A65628',\
+        7 '#F781BF',\
+        8 '#E41A1C')
+    unset colorbox
+        
+    # title and axes
+    set title 'Clusters - ${title}' font 'sans, 16'
+    unset xlabel
+    set xrange [-1:1]
+    unset ylabel
+    set yrange [-1:1]
+    
+    # styles
+    set style line 1 linecolor palette pointtype 7 pointsize 0.5
+    
+    # plot
+    plot '< paste ${datafile} ${clusfile}' using 2:3:5 with points notitle ls 1;
 EOP

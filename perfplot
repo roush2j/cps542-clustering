@@ -1,15 +1,29 @@
 #!/bin/bash
-A=100
-B=10
+filename=${1}
+# extract title from the first line in the form "#\t...\tTITLE"
+title=$(sed '1q;d' $filename | awk -F$'\t' '{ print $3 }')
+# extract x-axis label from the second line in the form "LABEL\t..."
+label=$(sed '2q;d' $filename | awk -F$'\t' '{ print $1 }')
 gnuplot -p <<- EOP
+    # terminal
     set terminal wxt size 800,450
-    set title '${1}'
-    set xlabel "Number of tuples"
-    set ylabel "Runtime (ms)"
-    set y2label "Memory Useage (kB)"
+    
+    # title and axes
+    set title 'Performance - ${title}' font 'sans, 16'
+    set xlabel '$label' font 'sans, 12'
+    set ylabel "Runtime (ms)" font 'sans, 12'
+    set ytics nomirror
+    set yrange [0:]
+    set y2label "Memory Useage (kB)" font 'sans, 12'
+    set y2tics nomirror
+    set y2range [0:]
+    
+    # plot styles
     set key top left reverse Left
-    set style line 1 lc rgb 'green' pt 5
-    set style line 2 lc rgb 'blue' pt 7
-    plot '${1}' using 1:(\$4/1000000) title "Runtime" ls 1;
-    replot '${1}' using 1:(\$5/1024) title "Memory" ls 2 axes x1y2;
+    set style line 1 linecolor rgb 'green'  pointtype 5
+    set style line 2 linecolor rgb 'blue'   pointtype 7
+    
+    # plot
+    plot '${filename}' using 1:(\$4/1000000) title "Runtime" ls 1, \
+        '' using 1:(\$5/1024) title "Memory" ls 2 axes x1y2;
 EOP
