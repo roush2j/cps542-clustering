@@ -4,7 +4,7 @@ public class Main {
 
     public static void main(String[] args) throws IOException {
 
-        AlgorithmTests tests = new AlgorithmTests();
+        AlgorithmTests tests = new AlgorithmTests("results");
         tests.addAlgorithm("kmeans", (data, rand, clCnt) -> {
             return new KMeans(data, clCnt, rand);
         });
@@ -32,6 +32,21 @@ public class Main {
             int ptCnt = 1000;
             if (args.length > 1) ptCnt = Integer.parseInt(args[1]);
             tests.commonDataTest(ptCnt, 4);
+        }
+        if (args.length == 0 || args[0].equalsIgnoreCase("basicdata")) {
+            tests.basicDataTest();
+        }
+        if (args.length == 0 || args[0].equalsIgnoreCase("basicnoise")) {
+            tests.basicNoiseTest();
+        }
+        if (args.length == 0 || args[0].equalsIgnoreCase("outliers")) {
+            tests.outlierTest();
+        }
+        if (args.length == 0 || args[0].equalsIgnoreCase("oblong")) {
+            tests.oblongTest();
+        }
+        if (args.length == 0 || args[0].equalsIgnoreCase("concave")) {
+            tests.concaveTest();
         }
     }
 }

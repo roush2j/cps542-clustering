@@ -65,7 +65,7 @@ public class DBSCAN extends Clustering {
                     .getSimpleName());
         } else {
             double eps = avgdist[maxk] / tupx;
-            int minpts = (int) Math.ceil(maxk * 0.15 * data.tupleCnt / tupx);
+            int minpts = (int) Math.ceil(maxk * 0.1 * data.tupleCnt / tupx);
             this.clusterCnt = dbscan(data, eps, minpts);
             this.desc = String.format("%s(auto eps=%.3f, minpts=%d)",
                     getClass().getSimpleName(), eps, minpts);

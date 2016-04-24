@@ -181,9 +181,6 @@ public class DataGenerator {
         return new Generator() {
 
             @Override protected int generate(double[] data, int doff) {
-                // We sample each attribute independently from a normal dist.
-                // This produces the same result as sampling all attributes
-                // together from a multivariate normal distribution.
                 for (int k = 0; k < attrc; k++) {
                     double x = (rng.nextDouble() * 2 - 1) * size[k];
                     data[doff + k] = pos[k] + x;
@@ -206,6 +203,36 @@ public class DataGenerator {
 
             @Override public String toString() {
                 return "WhiteNoiseBox" + super.toString();
+            }
+        };
+    }
+    
+    public Generator uniformBox() {
+        return new Generator() {
+
+            @Override protected int generate(double[] data, int doff) {
+                for (int k = 0; k < attrc; k++) {
+                    double x = (rng.nextDouble() * 2 - 1) * size[k];
+                    data[doff + k] = pos[k] + x;
+                }
+                return 1;
+            }
+
+            @Override protected double population() {
+                // Calculate the volume of an N-rectangle
+                double V = 1;
+                for (int k = 0; k < attrc; k++) {
+                    V *= 2 * size[k];
+                }
+                return density * V;
+            }
+
+            @Override protected int clusterCount() {
+                return 1;
+            }
+
+            @Override public String toString() {
+                return "UniformBox" + super.toString();
             }
         };
     }
