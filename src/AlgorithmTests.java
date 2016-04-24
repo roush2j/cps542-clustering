@@ -28,13 +28,13 @@ public class AlgorithmTests {
         return g.generate(tupCnt);
     }
 
-    public void perfTests() throws IOException {
+    public void perfTests(double maxtime) throws IOException {
         for (Map.Entry<String, ClusteringAlgo> t : algos.entrySet()) {
             String name = t.getKey();
             ClusteringAlgo algo = t.getValue();
-            tuplePerf(name, algo, 4, 10000, 10, 10000, 1.0);
-            attrPerf(name, algo, 25, 1000, 10, 10000, 1.0);
-            clusPerf(name, algo, 4, 1000, 100, 10000, 1.0);
+            tuplePerf(name, algo, 4, 100000, 10, 1000, maxtime);
+            attrPerf(name, algo, 100, 1000, 10, 1000, maxtime);
+            clusPerf(name, algo, 4, 1000, 100, 1000, maxtime);
         }
     }
 
@@ -101,7 +101,8 @@ public class AlgorithmTests {
         p.println("AttrCount\tRepeats\tTime(ns)\tTimePerRep(ns)\tMem(bytes)");
 
         // repeat testing
-        for (int attrcnt = 1; attrcnt <= maxAttr; attrcnt++) {
+        for (int attrcnt = 1; attrcnt <= maxAttr; // 
+        attrcnt = (int) Math.ceil(attrcnt * 1.1)) {
             // generate a new random data set
             DataGenerator.GeneratedData g = genData(attrcnt, tupCnt, clCnt,
                     clrad);
@@ -148,7 +149,7 @@ public class AlgorithmTests {
 
         // repeat testing
         for (int cluscnt = 1; cluscnt <= maxclus; //
-        cluscnt = (int) Math.ceil(cluscnt * 1.2)) {
+        cluscnt = (int) Math.ceil(cluscnt * 1.1)) {
             // generate a new random data set
             double clrad = 0.5 / cluscnt;
             DataGenerator.GeneratedData g = genData(attrCnt, tupCnt, cluscnt,
@@ -189,7 +190,7 @@ public class AlgorithmTests {
         for (Map.Entry<String, ClusteringAlgo> t : algos.entrySet()) {
             String name = t.getKey();
             ClusteringAlgo algo = t.getValue();
-            quality(name, algo, 6, 1000, 20);
+            quality(name, algo, 8, 2000, 20);
         }
     }
 
@@ -242,20 +243,22 @@ public class AlgorithmTests {
         p.close();
     }
 
-    public void commonDataTest() throws IOException {
-        final int npts = 10000, nclus = 10;
+    public void commonDataTest(int tupleCount, int clusterCnt)
+            throws IOException {
         DataGenerator g = new DataGenerator(rand, 2);
         g.add(g.whiteNoiseBox().density(0.1));
-        g.addGroup(nclus, g.normalSphere().density(1),
+        g.addGroup(
+                clusterCnt, //
+                g.normalSphere().density(1), //
                 g.whiteNoiseBox().size(0.8),
-                g.normalSphere().pos(0.2 / nclus).size(0.05 / nclus));
-        DataGenerator.GeneratedData gc = g.generate(npts);
+                g.normalSphere().pos(0.2 / clusterCnt).size(0.05 / clusterCnt));
+        DataGenerator.GeneratedData gc = g.generate(tupleCount);
 
         gc.data.print(bufferedFileout("testdata.dataset"));
         gc.print(bufferedFileout("testdata.truth"));
 
         for (Map.Entry<String, ClusteringAlgo> t : algos.entrySet()) {
-            Clustering cl = t.getValue().apply(gc.data, rand, nclus);
+            Clustering cl = t.getValue().apply(gc.data, rand, clusterCnt);
             cl.print(bufferedFileout("testdata." + t.getKey()));
         }
     }
