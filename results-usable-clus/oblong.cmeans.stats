@@ -1,0 +1,10 @@
+Found Clusters	B3 Precision	B3 Recall
+2	0.49956	0.49997	
+
+Noise	Compactness	Separation	Silhouette
+0.00000	0.49920	0.93735	0.44026	
+
+ClusterID	Compactness	Separation	Silhouette
+1	0.49796	0.93735	0.44225	
+2	0.50053	0.93735	0.43812	
+
