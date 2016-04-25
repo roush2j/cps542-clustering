@@ -1,0 +1,8 @@
+#!/bin/bash
+for test in "basicdata" "basicnoise" "outliers" "concave" "oblong" "testdata"
+do
+    for algo in "kmeans" "dbscan" "cmeans" "kmedoids" "truth"
+    do
+        ./clusplot $1/$test $algo
+    done
+done

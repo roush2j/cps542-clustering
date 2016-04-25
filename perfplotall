@@ -1,0 +1,8 @@
+#!/bin/bash
+for measure in "tupleperf" "attrperf" "clusperf"
+do
+    for algo in "kmeans" "dbscan" "cmeans" "kmedoids"
+    do
+        ./perfplot $1/$algo.$measure
+    done
+done

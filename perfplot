@@ -6,7 +6,8 @@ title=$(sed '1q;d' $filename | awk -F$'\t' '{ print $3 }')
 label=$(sed '2q;d' $filename | awk -F$'\t' '{ print $1 }')
 gnuplot -p <<- EOP
     # terminal
-    set terminal wxt size 800,450
+    set terminal png size 800,450
+    set output '${filename}.png'
     
     # title and axes
     set title 'Performance - ${title}' font 'sans, 16'
@@ -17,13 +18,14 @@ gnuplot -p <<- EOP
     set y2label "Memory Useage (kB)" font 'sans, 12'
     set y2tics nomirror
     set y2range [0:]
+    set autoscale fix
     
     # plot styles
     set key top left reverse Left
-    set style line 1 linecolor rgb 'green'  pointtype 5
-    set style line 2 linecolor rgb 'blue'   pointtype 7
+    set style line 1 linecolor rgb 'green'  pointtype 5  pointsize 0.6
+    set style line 2 linecolor rgb 'blue'   pointtype 7  pointsize 0.6
     
     # plot
-    plot '${filename}' using 1:(\$4/1000000) title "Runtime" ls 1, \
-        '' using 1:(\$5/1024) title "Memory" ls 2 axes x1y2;
+    plot '${filename}' using 1:(\$4/1000000) with linespoints title "Runtime" ls 1, \
+        '' using 1:(\$5/1024) with linespoints title "Memory" ls 2 axes x1y2;
 EOP

@@ -263,14 +263,7 @@ public class AlgorithmTests {
                 g.whiteNoiseBox().size(0.8),
                 g.normalSphere().pos(0.2 / clusterCnt).size(0.05 / clusterCnt));
         DataGenerator.GeneratedData gc = g.generate(tupleCount);
-
-        gc.data.print(bufferedFileout("testdata.dataset"));
-        gc.print(bufferedFileout("testdata.truth"));
-
-        for (Map.Entry<String, ClusteringAlgo> t : algos.entrySet()) {
-            Clustering cl = t.getValue().apply(gc.data, rand, clusterCnt);
-            cl.print(bufferedFileout("testdata." + t.getKey()));
-        }
+        dataTest("testdata", gc.data, gc, clusterCnt);
     }
 
     public void basicDataTest() throws IOException {
@@ -280,14 +273,7 @@ public class AlgorithmTests {
         g.add(g.uniformSphere().pos(0.5, -0.5).size(0.4));
         g.add(g.uniformSphere().pos(-0.5, -0.5).size(0.4));
         DataGenerator.GeneratedData gc = g.generate(1000);
-
-        gc.data.print(bufferedFileout("basicdata.dataset"));
-        gc.print(bufferedFileout("basicdata.truth"));
-
-        for (Map.Entry<String, ClusteringAlgo> t : algos.entrySet()) {
-            Clustering cl = t.getValue().apply(gc.data, rand, 4);
-            cl.print(bufferedFileout("basicdata." + t.getKey()));
-        }
+        dataTest("basicdata", gc.data, gc, 4);
     }
 
     public void basicNoiseTest() throws IOException {
@@ -298,14 +284,7 @@ public class AlgorithmTests {
         g.add(g.uniformSphere().pos(-0.5, -0.5).size(0.25));
         g.add(g.whiteNoiseBox().size(1).density(0.1));
         DataGenerator.GeneratedData gc = g.generate(1500);
-
-        gc.data.print(bufferedFileout("basicnoise.dataset"));
-        gc.print(bufferedFileout("basicnoise.truth"));
-
-        for (Map.Entry<String, ClusteringAlgo> t : algos.entrySet()) {
-            Clustering cl = t.getValue().apply(gc.data, rand, 4);
-            cl.print(bufferedFileout("basicnoise." + t.getKey()));
-        }
+        dataTest("basicnoise", gc.data, gc, 4);
     }
 
     public void outlierTest() throws IOException {
@@ -315,14 +294,7 @@ public class AlgorithmTests {
         g.add(g.whiteNoiseBox().pos(-0.95, 0.8).size(0.04, 0.1).density(0.15));
         g.add(g.whiteNoiseBox().pos(-0.95, -0.8).size(0.04, 0.1).density(0.15));
         DataGenerator.GeneratedData gc = g.generate(1000);
-
-        gc.data.print(bufferedFileout("outliers.dataset"));
-        gc.print(bufferedFileout("outliers.truth"));
-
-        for (Map.Entry<String, ClusteringAlgo> t : algos.entrySet()) {
-            Clustering cl = t.getValue().apply(gc.data, rand, 2);
-            cl.print(bufferedFileout("outliers." + t.getKey()));
-        }
+        dataTest("outliers", gc.data, gc, 2);
     }
 
     public void oblongTest() throws IOException {
@@ -330,14 +302,7 @@ public class AlgorithmTests {
         g.add(g.uniformBox().pos(0, 0.3).size(0.8, 0.2));
         g.add(g.uniformBox().pos(0, -0.3).size(0.8, 0.2));
         DataGenerator.GeneratedData gc = g.generate(1000);
-
-        gc.data.print(bufferedFileout("oblong.dataset"));
-        gc.print(bufferedFileout("oblong.truth"));
-
-        for (Map.Entry<String, ClusteringAlgo> t : algos.entrySet()) {
-            Clustering cl = t.getValue().apply(gc.data, rand, 2);
-            cl.print(bufferedFileout("oblong." + t.getKey()));
-        }
+        dataTest("oblong", gc.data, gc, 2);
     }
 
     public void concaveTest() throws IOException {
@@ -347,13 +312,64 @@ public class AlgorithmTests {
         g.add(g.uniformBox().pos(-0.5, 0).size(0.2, 0.3));
         g.add(g.uniformBox().pos(0.3, 0).size(0.4, 0.1).density(1.2));
         DataGenerator.GeneratedData gc = g.generate(1000);
+        dataTest("concave", gc.data, gc, 2);
+    }
 
-        gc.data.print(bufferedFileout("concave.dataset"));
-        gc.print(bufferedFileout("concave.truth"));
+    private void dataTest(String name, DataSet data, Clustering truth, int clCnt)
+            throws IOException {
+        data.print(bufferedFileout(name + ".dataset"));
+        truth.print(bufferedFileout(name + ".truth"));
+        {
+            PrintStream stats = new PrintStream(outputDir.resolve(
+                    name + ".truth.stats").toFile());
+            stats.println("Found Clusters\tB3 Precision\tB3 Recall");
+            stats.print(truth.clusterCount());
+            stats.print('\t');
+            BCubed bc = new BCubed(truth, truth);
+            stats.format("%.5f\t%.5f\t", bc.precision, bc.recall);
+            stats.println();
+            stats.println();
 
+            stats.println("Noise\tCompactness\tSeparation\tSilhouette");
+            Silhouette sil = new Silhouette(data, truth);
+            stats.format("%.5f\t%.5f\t", sil.noise, sil.compactness);
+            stats.format("%.5f\t%.5f\t", sil.separation, sil.silhouette);
+            stats.println();
+            stats.println();
+
+            stats.close();
+        }
         for (Map.Entry<String, ClusteringAlgo> t : algos.entrySet()) {
-            Clustering cl = t.getValue().apply(gc.data, rand, 2);
-            cl.print(bufferedFileout("concave." + t.getKey()));
+            Clustering cl = t.getValue().apply(data, rand, clCnt);
+            cl.print(bufferedFileout(name + "." + t.getKey()));
+
+            PrintStream stats = new PrintStream(outputDir.resolve(
+                    name + "." + t.getKey() + ".stats").toFile());
+            stats.println("Found Clusters\tB3 Precision\tB3 Recall");
+            stats.print(cl.clusterCount());
+            stats.print('\t');
+            BCubed bc = new BCubed(truth, cl);
+            stats.format("%.5f\t%.5f\t", bc.precision, bc.recall);
+            stats.println();
+            stats.println();
+
+            stats.println("Noise\tCompactness\tSeparation\tSilhouette");
+            Silhouette sil = new Silhouette(data, cl);
+            stats.format("%.5f\t%.5f\t", sil.noise, sil.compactness);
+            stats.format("%.5f\t%.5f\t", sil.separation, sil.silhouette);
+            stats.println();
+            stats.println();
+
+            stats.println("ClusterID\tCompactness\tSeparation\tSilhouette");
+            for (int c = 1; c <= sil.clusterCount(); c++) {
+                stats.format("%d\t%.5f\t", c, sil.compactness(c));
+                stats.format("%.5f\t%.5f\t", sil.separation(c),
+                        sil.silhouette(c));
+                stats.println();
+            }
+            stats.println();
+
+            stats.close();
         }
     }
 
