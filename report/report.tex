@@ -49,66 +49,80 @@ $k$-means was first proposed by in \cite{Lloyd}; $k$-medoids was first proposed 
 \cite{Jain99} provides a general---but broad and comprehensive---overview of clustering techniques.  The authors describe the different classes of clustering algorithms, such as hierarchical, partitional, and fuzzy, and then give high-level overviews of many of the different algorithms in each class.  However, \cite{Jain99} limits its discussion of performance to generalities only, observing in one instance, for example, that artificial neural networks perform better than $k$-means and fuzzy $c$-means \cite{Jain99}.  However, they do not give specific examples of performance comparisons, nor do they devise an experiment to test the differences.
 
 \section{Methodology}
-We were interested in determining how each of our clustering algorithms performed in relation to one another.  To do so, we opted to build a Java application which would generate increasingly larger data sets and then run each algorithm on the respective data sets until a predetermined maximum threshold was exceeded.  Additionally, we looked at three different types of increases:  increase in tuple count, increase in attribute count, and increase in cluster count.  We were able to track the memory usage during each run as well as the run time based on start and end times.  In addition, we were able to gauge the accuracy of the algorithms since the data was generated with known cluster centers.
+We are interested in determining how each of our clustering algorithms performed in relation to one another, and how their performance varied with input size.  We opted to implement each algorithm from scratch in Java, along with a test framework which would generate arbitrarily sized data sets.  We look at three independent variables for performance: the number of tuples (data points), the number of attributes (dimensions), and the number of clusters.  Unless otherwise specified, all asymptotic complexity figures given in the paper refer to the number of \emph{tuples} only.
 
-\subsection{Components}
-The application comprises the separate clustering algorithms implemented as classes to create pluggable components that can be passed into a testing framework.  In addition, there are two utility classes that generate the clustered data sets consisting of both spherical and non-spherical clusters.
+We measured runtime and memory consumption using the introspection tools of the Java Virtual Machine. In addition, we (separately) test a wide range of input sizes and configurations to gauge the accuracy of the algorithms with several different cluster quality metrics.
 
-\subsubsection{Base Class}
-The base class, \verb+Clustering+, is an abstract class that provides a well-defined interface for plugging into the framework.  Each algorithm is then implemented as an extension of \verb+Clustering+ so that it can be monitored and analyzed by the testing framework.
+\subsection{Data Generation}
+There are myriad sources for data sets which could be clustered, but the exact content of the data itself is not important when measuring performance.  It is, however, important to guarantee that the data does not contain hidden biases and that it covers a broad range of possible inputs.  It is also helpful to know the ``true'' clusters a priori, for the purposes of measuring each algorithms accuracy.
 
-\subsubsection{Data Set Class}
-As its name may imply, the data set class, \verb+DataSet+, stores the cluster data for the clustering algorithms to work on.  \verb+DataSet+ instances are passed into the algorithm implementation classes, which then use the actual data within the instance to produce results.  Additionally, \verb+DataSet+ provides utility methods for calculating the distance between pairs of tuples.  For consistency, we chose to use Euclidean distance for all distance measures.
+The core of our generator is the abstract \verb+DataGenerator.Generator+ interface (henceforth just 
+\verb+Generator+).  Each \emph{class} that implements \verb+Generator+ represents an abstract cluster shape and density profile.
+Our generator suite includes uniform and gaussian spheres (good for semi-randomly scattered clusters) and uniform boxes (good for building hand-crafted data sets to test edge cases).  Each \emph{instance} of these classes represents a single cluster, with an instance-specific size and center position and density multiplier.
 
-\subsubsection{Data Generator Classes}
-The data itself presents a challenge when analyzing algorithms that analyze data.  There are myriad sources for data sets and the data set itself makes no difference when analyzing performance; as long as all of the algorithms analyze the same data set, we can easily compare how much CPU time and memory each algorithm uses when it runs.  However, accuracy poses an entirely different problem:  we must determine whether our implementations produce correct results, but we cannot know whether the results are correct without clustering the data beforehand and then comparing the results produced by each of the different implementations.
+To actually generate a data set, we take a list of clusters (i.e. generator instances) and feed in the number of dimensions, the number of tuples, and a pseudo-random seed value.  The result is a set of tuples randomly distributed amongst the clusters according to their volumes and density multipliers, and randomly positioned within their assigned cluster according to its shape and density profile.
 
-Ultimately, we decided to reverse-engineer the problem.  We created two utility classes that build $n$-dimensional clusters based on predefined starting data.  The first class, \verb+DataGenerator+, creates spherical clusters based upon either specified or randomly-generated cluster centers.  The cluster distances and radii are given, and points are generated both within the cluster and as noise.
+The generated data is stored in a simple data structure, \verb+DataSet+, and passed in this form as input to our four clustering algorithms.  The ``true'' clustering of the generated data - a mapping from each tuple to its original cluster generator - is also kept for reference purposes.
 
-The second generator class, \verb+generateData+, creates data in non-spherical clusters.  Since density-based clustering algorithms are able to cluster non-spherical data, we also needed a way to test the accuracy of our density-based implementation.  The \verb+generateData+ class creates cluster points along a sine wave, within a specified distance, and then adds noise points to make the data more realistic.
+A scaled-down example of generated data is shown in Figure \ref{fig:exmaplegen}.  In this case we use four normal (gaussian) circle generators with semi-random center positions against a low-density background of white noise, with a total of 1000 tuples.  During actual testing, our data sets could have dozens of clusters, span up to 50 dimensions, and contain tens of thousands of tuples.
 
-\verb+DataGenerator+ and \verb+generateData+ allow us to start with known cluster ``centers'' and generate points around those centers, adding noise to mimic real-world data.  Knowing the cluster centers beforehand provides us with a ``ground truth'' against which we can gauge the accuracy of our algorithm implementations.  We can run each algorithm on the data sets and then analyze the results to see how close they are to the known centers.
+\begin{figure}
+	\centering
+	\includegraphics[width=0.8\textwidth]{{{../results-usable-clus/testdata.truth}}}
+\caption{An example of generated data.}
+\label{fig:exmaplegen}
+\end{figure}
 
-\subsubsection{Algorithm Implementations}
-There are many different algorithms the perform distance-based, density-based, and probabilistic model-based clustering.  We chose to implement four clustering algorithms:  $k$-means and PAM (distance-based), DBSCAN (density-based), and EM (probabilistic-based).
+\subsection{Quality Metrics}
+A common metric for measuring the quality of a potential clustering is the \textbf{Silhouette Coefficient}.  
+Informally speaking, this combines the concepts of ``compactness'' (the average dissimilarity of objects within the same
+cluster) and ``separation'' (the average dissimilarity of objects with the nearest foreign cluster).
+The larger the silhouette coefficient, the better the clustering is (at least for naturally compact, convex clusters).
+The silhouette for a whole clustering is the average of the coefficient of each individual data tuple:
 
-\paragraph{\textit{k}-Means} The $k$-means implementation is fairly straightforward.  It takes initial cluster centers, iterates through each tuple in the data set and assigns it to a cluster based on the closest center, recalculates the centers according to the mean values for each attribute in the tuples, and then starts the process over.  This process continues until there are no more changes in the cluster assignments.
+	\[ Sl = \sum_i^N \frac{\text{sep}_i - \text{cmp}_i}{\text{max}(\text{sep}_i, \text{cmp}_i)} \]
+
+Since the ground truth clusterings are available to us for our test data, we can also use them to directly
+ evaluate cluster quality.  We use the measures \textbf{Precision} and \textbf{Recall}.  
+Precision ($Pr$) is the fraction of tuples in a cluster that truly belong together, averaged over all clusters.  
+Recall ($Rc$) is the fraction of objects belonging together (in the same 
+``true'' cluster) that are clustered together, averaged over all ``true'' 
+clusters.  The larger both metrics are (up to a maximum of 1.0), the better the clustering corresponds
+with the ``ground truth''.
+
+\subsection{Clustering Algorithm Implementations}
+Each of the four clustering algorithms was implemented on top of an abstract Java class, \verb+Clustering+.
+This class documents the interface that each algorithm must provide.  Simply put, each clustering algorithm
+was given a \verb+DataSet+ and, if necessary, the number of ``true'' clusters as input.  The output was a mapping
+from data tuples to clusters.
+
+There are many different algorithms for distance-based, density-based, and probabilistic model-based clustering.  We chose to implement four specific clustering algorithms:  $k$-means and PAM (distance-based), DBSCAN (density-based), and EM (probabilistic-based).
+
+\subsubsection{\textit{k}-Means} 
+The $k$-means implementation is fairly straightforward.  It takes initial cluster centers, iterates through each tuple in the data set and assigns it to a cluster based on the closest center, recalculates the centers according to the mean values for each attribute in the tuples, and then starts the process over.  This process continues until there are no more changes in the cluster assignments.
 
 The $k$-means algorithm could be considered one of the simplest algorithms in terms of understanding and implementation.  There are no nested \verb+for+ loops, so the algorithms runs in $O(n)$ time.  The only potential problem is that $k$-means assigns every tuple to a cluster, so it is sensitive to noise.  In addition, extreme outliers have great potential to skew the clusters.
 
-\paragraph{PAM} Partitioning Around Medoids (PAM) is an algorithm that performs $k$-medoids clustering.  PAM uses representative objects from the data set.  That is, the algorithm tries to find one object per cluster that most accurately represents all of the object in the cluster.  PAM requires ``seed'' objects---initial starting tuples from the data set---which are arbitrarily chosen to represent initial clusters.  It then begins an iterative process whereby it replaces representative objects with other objects until the best possible clusters are produced, which is tested by calculating the absolute error.
+\subsubsection{PAM}
+Partitioning Around Medoids (PAM) is an algorithm that performs $k$-medoids clustering.  PAM uses representative objects from the data set.  That is, the algorithm tries to find one object per cluster that most accurately represents all of the object in the cluster.  PAM requires ``seed'' objects---initial starting tuples from the data set---which are arbitrarily chosen to represent initial clusters.  It then begins an iterative process whereby it replaces representative objects with other objects until the best possible clusters are produced, which is tested by calculating the absolute error.
 
-PAM uses a greedy method by choosing the object with the lowest cost as determined by the average dissimilarity between the object and its cluster representative.  Despite using a greedy method, PAM is an inherently inefficient algorithm as it ultimately checks each object against all other objects in an iterative manner; our implementation uses nested \verb+for+ loops to mimic this behavior, which causes the algorithm to run in $O(n^{2})$ time.  However, as an attempt to mitigate this inherent inefficiency, our implementation used a threshold value that limited the number of object to be chosen as potential representative objects.
+PAM uses a greedy method by choosing the object with the lowest cost as determined by the average dissimilarity between the object and its cluster representative.  Despite using a greedy method, PAM is an inherently inefficient algorithm as it ultimately checks each object against all other objects in an iterative manner; our implementation uses nested \verb+for+ loops to mimic this behavior, which causes the algorithm to run in $O(n^{2})$ time.
 
-\paragraph{DBSCAN} Density-Based Spatial Clustering of Applications with Noise (DBSCAN) is a density-based clustering algorithm. DBSCAN uses two user-specified parameters, epsilon ($\epsilon$) and minimum points ($MinPts$), to find regions of dense ``neighborhoods'' of data objects, which are then considered clusters.  Density is a function of the radius of the neighborhood, specified by $\epsilon$, and a neighborhood is defined by $MinPts$.  That is, for each data object in the data set, DBSCAN looks at how many other objects are within a radius of $\epsilon$, and if that value is greater than or equal to $MinPts$, then the object is considered a core object.  From there, DBSCAN finds small dense regions by connecting core objects with respect to $\epsilon$ and $MinPts$, and finally it builds large dense regions by connecting objects within a radius of $\epsilon$ of already-connected objects.
+\subsubsection{DBSCAN} 
+Density-Based Spatial Clustering of Applications with Noise (DBSCAN) is a density-based clustering algorithm. DBSCAN uses two user-specified parameters, epsilon ($\epsilon$) and minimum points ($MinPts$), to find regions of dense ``neighborhoods'' of data objects, which are then considered clusters.  Density is a function of the radius of the neighborhood, specified by $\epsilon$, and a neighborhood is defined by $MinPts$.  That is, for each data object in the data set, DBSCAN looks at how many other objects are within a radius of $\epsilon$, and if that value is greater than or equal to $MinPts$, then the object is considered a core object.  From there, DBSCAN finds small dense regions by connecting core objects with respect to $\epsilon$ and $MinPts$, and finally it builds large dense regions by connecting objects within a radius of $\epsilon$ of already-connected objects.
 
-The biggest limiting factor with our DBSCAN implementation proved to be with regard to the the data set implementation.  We chose to store the tuples in a single-dimensional array since we needed a common data structure for each implementation to use, and a single-dimensional array seemed the simplest.  However, since the DBSCAN algorithm requires first iterating through each tuple, then through each core tuple, then through each connected core tuple, our implementation ended up using nested \verb+for+ loops, which resulted in a loop structure that would run in $O(n^2)$ time.
+The biggest limiting factor with our DBSCAN implementation proved to be with regard to the the data set implementation.
+The original specification of the algorithm assumes an efficient $O(lg n)$ way to locate the nearest neighbors of any given
+tuple.  We chose to store the tuples in a flat array for simplicity, and we did not implement any fast lookup mechanisms.
+Thus, our implementation requires $O(n)$ to find the nearest neighbors of a tuple, and the algorithm itself runs in $O(n^2)$ time.
 
-\paragraph{EM} Expectation-maximization (EM) is a technique for producing fuzzy clusters and probabilistic model-based clusters.  EM starts with randomly-selected objects as potential centers and then iteratively works in two steps:  the expectation step and the maximization step.  The expectation step iterates through each data object, calculates the distance to each of the potential centers, and then calculates a partition matrix containing values that indicate to what degree each object belongs to a cluster centered at each of the potential centers.  The partition matrix, containing membership weights, is then normalized so the sum of degrees for each object is 1.  Next, the maximization step uses the partition matrix to recalculate the centroids, by calculating an optimal center and then finding the data object closest to that optimal center.  The process repeats until the clusters stop changing or until the change is below some predefined threshold.
+\subsubsection{EM} 
+Expectation-maximization (EM) is a technique for producing fuzzy clusters and probabilistic model-based clusters.  EM starts with randomly-selected objects as potential centers and then iteratively works in two steps:  the expectation step and the maximization step.  The expectation step iterates through each data object, calculates the distance to each of the potential centers, and then calculates a partition matrix containing values that indicate to what degree each object belongs to a cluster centered at each of the potential centers.  The partition matrix, containing membership weights, is then normalized so the sum of degrees for each object is 1.  Next, the maximization step uses the partition matrix to recalculate the centroids, by calculating an optimal center and then finding the data object closest to that optimal center.  The process repeats until the clusters stop changing or until the change is below some predefined threshold.
 
-EM runs until there are no more changes.  Despite running in $O(n)$ time, there is potential for the algorithm not to converge, but to end up with increasingly smaller changes, which requires a threshold to determine when to stop running the algorithm.  One challenge we also faced was that the floating point error inherent in all CPUs introduces inaccuracies, so ``no more changes'' automatically becomes a matter of ``sufficiently small changes.''  Either way, setting a threshold values was sufficient to overcome both of these problems.
-
-\subsubsection{Testing Framework}
-The testing framework, \verb+AlgorithmTests+, accepts data generator class instances and uses those to generate larger and larger sets of $n$-dimensional tuples until either a specified maximum number of runs has occurred or until a specified maximum time threshold has passed.  The generated data are passed into instances of the algorithm implementation classes, which cluster the data.  The framework then tracks the performance of each algorithm in terms of total processing time and memory usage and outputs the results to a text file.  Additionally, \verb+AlgorithmTests+ contains methods for testing performance based on increasing numbers of tuples, increasing numbers of dimensions, and increasing numbers of clusters.
+EM runs until there are no more changes.  Despite running in $O(n)$ time, there is potential for the algorithm not to converge, but to end up with increasingly smaller changes, which requires a threshold to determine when to stop running the algorithm.
 
 \section{Results}
-We looked at the results of the clustering algorithms both in terms of how accurately each algorithm calculated clusters compared to what we were expecting (i.e. the ``ground truth'') and in terms of performance (both run time and memory usage).  Section \ref{ssec:clusters} gives the results of the generated clusters on varying types of data sets, Section \ref{ssec:actual-dataset} discusses the clustering results of the data set used for testing, and Section \ref{ssec:performance} gives the absolute performance results.
-
-\subsection{Algorithm Implementation}
-In table \ref{tab:runTimes}, a comparison can be made between the run time of our algorithm implementation and the original proposed algorithm.  It can be seen that we matched the run times for all algorithms except for DBSCAN.  This mismatch was due to not implementing an efficient lookup method for this algorithm.  This would have required significant work on the common data structure used throughout the program and significantly over complicated the program.  If this was for a commercial program, all attempts would be made to improve the efficiency of the DBSCAN algorithm.  However, as we are only comparing the algorithm against other clustering algorithms, the difference in run times for our purpose is acceptable.   
-
-\begin{table} [!h]
-	\centering
-	\begin{tabular}{|c|c|c|}
-		\hline
-		 & Implementation & Original \\ \hline
-		 PAM & O($n^{2}$) & O($n^{2}$) \\ \hline
-		 $k$-means & O($n$) & O($n$) \\ \hline
-		 EM & O($n$) & O($n$) \\ \hline
-		 DBSCAN & O($n$) & O($n log n$)\\ \hline
-	\end{tabular}
-	\caption{Comparison of Run Times} \label{tab:runTimes}
-\end{table}
+We looked at the results of the clustering algorithms both in terms of how accurately each algorithm calculated clusters compared to what we were expecting (i.e. the ``ground truth'') and in terms of performance (both run time and memory usage).  Section \ref{ssec:clusters} gives the results of the generated clusters on varying types of data sets, and Section \ref{ssec:performance} gives the absolute performance results.
 
 \subsection{Clustering Results}\label{ssec:clusters}
 \begin{figure}
@@ -131,7 +145,6 @@ In table \ref{tab:runTimes}, a comparison can be made between the run time of ou
 	\caption{PAM}
 	\label{fig:kmedoids-basic}
 	\end{subfigure}
-	
 	\begin{subfigure}[b]{0.3\textwidth}
 	\centering
 	\includegraphics[scale=0.2]{{{../results-usable-clus/basicnoise.dbscan}}}
@@ -144,11 +157,11 @@ In table \ref{tab:runTimes}, a comparison can be made between the run time of ou
 	\caption{EM}
 	\label{fig:cmeans-basic}
 	\end{subfigure}
-\caption{Comparison of clustering results on a data set containing spherical clusters with random noise.}
+\caption{Clustering results on spherical clusters with random noise.}
 \label{fig:basic}
 \end{figure}
 
-Figure \ref{fig:basic} illustrates the results of clustering a basic data set with random noise points.  As we can see in Figure \ref{fig:dbscan-basic}, DBSCAN produced the most accurate results, successfully distinguishing noise from cluster points, and coming closest to matching the ground truth (Figure \ref{fig:expected-basic}).  On the other hand, $k$-means, PAM, and EM all produced relatively similar results, clustering all points without regard to noise.
+Figure \ref{fig:basic} illustrates the results of clustering a basic data set with random noise points.  As we can see in Figure \ref{fig:dbscan-basic}, DBSCAN produced the most precise results, successfully distinguishing noise from cluster points, and coming closest to matching the ground truth (Figure \ref{fig:expected-basic}).  On the other hand, $k$-means, PAM, and EM all produced relatively similar results, clustering all points without regard to noise.
 
 \begin{figure}
 	\centering
@@ -183,11 +196,11 @@ Figure \ref{fig:basic} illustrates the results of clustering a basic data set wi
 	\caption{EM}
 	\label{fig:cmeans-outliers}
 	\end{subfigure}
-\caption{Comparison of clustering results on a data set containing spherical clusters and extreme noise points.}
+\caption{Clustering results on spherical clusters with extreme outliers.}
 \label{fig:outliers}
 \end{figure}
 
-Figure \ref{fig:outliers} shows a data set still containing spherical clusters, but with extreme outlying points rather than random noise.  In this instance, the accuracy of the algorithms is not quite as clear.  As expected, $k$-means, PAM, and EM clustered all points, with $k$-means and EM producing the same results.  PAM and DBSCAN both successfully distinguished the clusters, however PAM also included the outlier points in the clusters and DBSCAN did not correctly categorize all outliers, but instead clustered some of the outliers.
+Figure \ref{fig:outliers} shows a data containing extreme outlying points rather than random noise.  In this instance, both DBSCAN and PAM do quite well.  $k$-means and EM mistakenly clump the two oval clusters together and put the outliers in their own cluster.  This highlights the particular weakness of these two algorithms, which both rely on geometric means and are therefore sensitive to outliers.  Notably, PAM uses median tuples and does not have this weakness.
 
 \begin{figure}
 	\centering
@@ -208,8 +221,7 @@ Figure \ref{fig:outliers} shows a data set still containing spherical clusters, 
 	\includegraphics[scale=0.2]{{{../results-usable-clus/concave.kmedoids}}}
 	\caption{PAM}
 	\label{fig:kmedoids-concave}
-	\end{subfigure}
-	
+	\end{subfigure}	
 	\begin{subfigure}[b]{0.3\textwidth}
 	\centering
 	\includegraphics[scale=0.2]{{{../results-usable-clus/concave.dbscan}}}
@@ -222,98 +234,14 @@ Figure \ref{fig:outliers} shows a data set still containing spherical clusters, 
 	\caption{EM}
 	\label{fig:cmeans-concave}
 	\end{subfigure}
-\caption{Comparison of clustering results on a data set containing a concave cluster.}
+\caption{Clustering results on a concave cluster.}
 \label{fig:concave}
 \end{figure}
 
-We can also see in Figure \ref{fig:concave} that DBSCAN performs the best when picking out a concave cluster.  Although the ground truth (Figure \ref{fig:expected-concave}) shows four clusters, the results of DBSCAN (Figure \ref{fig:dbscan-concave}) perhaps make more sense, visually.  In looking at the data points without consideration of actual cluster assignments, most people would likely see the points as being in two clusters as illustrated in Figure \ref{fig:dbscan-concave}.
+We can also see in Figure \ref{fig:concave} that DBSCAN performs the best when picking out a concave cluster.  This highlights the weakness of the other three algorithms, which all use distance to a cluster prototype and therefore are
+heavily biased towards compact, convex clusters.
 
-\begin{figure}
-	\centering
-	\begin{subfigure}[b]{0.3\textwidth}
-	\centering
-	\includegraphics[scale=0.2]{{{../results-usable-clus/oblong.truth}}}
-	\caption{Ground truth}
-	\label{fig:expected-oblong}
-	\end{subfigure}%	
-	\begin{subfigure}[b]{0.3\textwidth}
-	\centering
-	\includegraphics[scale=0.2]{{{../results-usable-clus/oblong.kmeans}}}
-	\caption{$k$-means}
-	\label{fig:kmeans-oblong}
-	\end{subfigure}%
-	\begin{subfigure}[b]{0.3\textwidth}
-	\centering
-	\includegraphics[scale=0.2]{{{../results-usable-clus/oblong.kmedoids}}}
-	\caption{PAM}
-	\label{fig:kmedoids-oblong}
-	\end{subfigure}
-	
-	\begin{subfigure}[b]{0.3\textwidth}
-	\centering
-	\includegraphics[scale=0.2]{{{../results-usable-clus/oblong.dbscan}}}
-	\caption{DBSCAN}
-	\label{fig:dbscan-oblong}
-	\end{subfigure}%
-	\begin{subfigure}[b]{0.3\textwidth}
-	\centering
-	\includegraphics[scale=0.2]{{{../results-usable-clus/oblong.cmeans}}}
-	\caption{EM}
-	\label{fig:cmeans-oblong}
-	\end{subfigure}
-\caption{Comparison of clustering results on a data set containing two oblong clusters.}
-\label{fig:oblong}
-\end{figure}
-
-In a data set with oblong clusters as shown in Figure \ref{fig:oblong}, DBSCAN once again performs the best.  Although Figure \ref{fig:dbscan-oblong} shows that it did categorize some points as outliers, DBSCAN did, for the most part, produce the expected clusters illustrated in \ref{fig:expected-oblong}.
-
-DBSCAN ended up being the best performer overall when clustering different types of data sets.  Although it did not produce 100\% accurate results, it was relatively accurate, particularly with its ability to distinguish noise points from clusters points.  On the other hand, $k$-means, PAM, and EM all produced essentially the same results regardless of the data set, so we must look at their memory and CPU performance to see if there are any distinguishing characteristics.
-
-\subsection{Actual Data Set}\label{ssec:actual-dataset}
-\begin{figure}
-	\centering
-	\begin{subfigure}[b]{\textwidth}
-	\centering
-	\includegraphics[scale=0.3]{{{../neeraj-plots/Actual}}}
-	\caption{Original data}
-	\label{fig:expected-clusters}
-	\end{subfigure}
-	
-	\begin{subfigure}[b]{0.5\textwidth}
-	\centering
-	\includegraphics[scale=0.3]{{{../neeraj-plots/Kmeans}}}
-	\caption{$k$-means.}
-	\label{fig:kmeans-clusters}
-	\end{subfigure}%
-	\begin{subfigure}[b]{0.5\textwidth}
-	\centering
-	\includegraphics[scale=0.3]{{{../neeraj-plots/Kmedoids}}}
-	\caption{PAM}
-	\label{fig:kmedoids-clusters}
-	\end{subfigure}
-	
-	\begin{subfigure}[b]{0.5\textwidth}
-	\centering
-	\includegraphics[scale=0.3]{{{../neeraj-plots/Dbscan}}}
-	\caption{DBSCAN}
-	\label{fig:dbscan-clusters}
-	\end{subfigure}%
-	\begin{subfigure}[b]{0.5\textwidth}
-	\centering
-	\includegraphics[scale=0.3]{{{../neeraj-plots/Cmeans}}}
-	\caption{EM}
-	\label{fig:em-clusters}
-	\end{subfigure}
-	
-	\caption{Expected clusters (as produced by the data generator) and clusters produced by the algorithm implementations.}
-	\label{fig:cluster-assignments}
-\end{figure}
-
-Figure \ref{fig:cluster-assignments} shows the resulting cluster assignments from the data set that was used for performance testing.  The data was generated to be clustered around nine centers as shown in Figure \ref{fig:expected-clusters} (note that cluster C4 contains the random noise, not clustered points).  Figure \ref{fig:dbscan-clusters} shows that DBSCAN produced clusters that most closely resemble the expected results, although it failed to find all nine clusters.  
-
-Figures \ref{fig:kmeans-clusters} and \ref{fig:em-clusters} show that neither $k$-means nor EM identified noise points, which is normal since those algorithms will cluster all points with no consideration to noise.  Interestingly, both $k$-means and EM discovered clusters in areas where the original data had no cluster points, as shown by the lower-right corners of Figures \ref{fig:kmeans-clusters} and \ref{fig:em-clusters} versus Figure \ref{fig:expected-clusters}.
-
-PAM was the one outlier in terms of accurately finding clusters.  It found only a single cluster, which contained all tuples in the data set.  As a result, we will need to further investigate our PAM implementation to determine if it is a fault of the algorithm itself or with our implementation.
+Overall, DBSCAN appears to be the most robust algorithm to edge cases and odd cluster shapes. Although it did not produce 100\% accurate results, it was relatively accurate, particularly with its ability to distinguish noise points from clusters points.  On the other hand, $k$-means, PAM, and EM all produced essentially similar results regardless of the data set, so we must look at their memory and CPU performance to see if there are any distinguishing characteristics.
 
 \subsection{Performance}\label{ssec:performance} 
 \begin{figure}
@@ -349,7 +277,7 @@ PAM was the one outlier in terms of accurately finding clusters.  It found only 
 
 Figure \ref{fig:perf-tuple} shows how our implementations performed as the number of tuples in the data set increased.  All four algorithms performed about the same in terms of memory usage:  memory consumption increased linearly as the number of tuples increased.  In terms of maximum memory usage, though, $k$-means outperformed the others by consuming no more than 40 KB of memory.  By contrast, EM was the clear loser at a maximum of 11 MB.
 
-We can also see some difference in the algorithms in terms of time performance.  Figures \ref{fig:pam-perf-tuple} and \ref{fig:dbscan-perf-tuple} show that PAM and DBSCAN run in $O(n^c)$ time for some power $c$, which is expected since both run in $O(n^2)$ time.  On the other hand, the functions describing the running times for $k$-means and EM are not immediately clear, although further testing may reveal their performance trends.  Figures \ref{fig:kmeans-perf-tuple} and \ref{fig:em-perf-tuple} show that time to cluster did not steadily increase, but instead tended to have relative ups and downs with an overall upward trend.  Additionally, Figure \ref{fig:em-perf-tuple} shows a dramatic increase in run time as the data set increased from about 6,000 to 7,000 tuples, followed by a dramatic relative decrease in run time as the data set increased from about 7,000 to 8,000 tuples.
+We can also see some difference in the algorithms in terms of time performance.  Figures \ref{fig:pam-perf-tuple} and \ref{fig:dbscan-perf-tuple} show that PAM and DBSCAN run in $O(n^2)$ time, which is consistent with our expectations.  On the other hand, the functions describing the running times for $k$-means and EM are not immediately clear, although further testing may reveal their performance trends.  Figures \ref{fig:kmeans-perf-tuple} and \ref{fig:em-perf-tuple} show that time to cluster did not steadily increase, but instead tended to have relative ups and downs with an overall upward trend.  Additionally, Figure \ref{fig:em-perf-tuple} shows a dramatic increase in run time as the data set increased from about 6,000 to 7,000 tuples, followed by a dramatic relative decrease in run time as the data set increased from about 7,000 to 8,000 tuples.
 
 \begin{figure}
 	\centering
@@ -381,6 +309,21 @@ We can also see some difference in the algorithms in terms of time performance. 
 	\caption{Performance of algorithm implementations based on increasing number of attributes per tuple.}
 	\label{fig:perf-attribute}
 \end{figure}
+
+Assuming that Figures \ref{fig:kmeans-perf-tuple} and \ref{fig:em-perf-tuple} do indeed show linear trends, we can compare our results to the theoretical expectations.  In table \ref{tab:runTimes}, we match the asymptotic run time of our implementation against that of the original proposed algorithm.  We matched the run times for all algorithms except for DBSCAN.  This mismatch is due to our lack of an efficient spatial lookup method for this algorithm, omitted for time (and complexity!) concerns.   
+
+\begin{table} [!h]
+	\centering
+	\begin{tabular}{|c|c|c|}
+		\hline
+		 & Implementation & Original \\ \hline
+		 PAM & O($n^{2}$) & O($n^{2}$) \\ \hline
+		 $k$-means & O($n$) & O($n$) \\ \hline
+		 EM & O($n$) & O($n$) \\ \hline
+		 DBSCAN & O($n^2$) & O($n log n$)\\ \hline
+	\end{tabular}
+	\caption{Comparison of Run Times} \label{tab:runTimes}
+\end{table}
 
 Figure \ref{fig:perf-attribute} illustrates that the number of attributes in each tuple had a dramatic effect on the performance of some of the algorithms.  In terms of memory usage, Figures \ref{fig:kmeans-perf-attribute}, \ref{fig:pam-perf-attribute}, and \ref{fig:em-perf-attribute} show that $k$-means, PAM, and EM were all relatively stable and that the usage for all three increased linearly as the number of attributes increased.  DBSCAN, however, exhibited ups and downs in its memory usage as shown in Figure \ref{fig:dbscan-perf-attribute}, which could potentially be a result of Java's garbage collector dynamically allocating and deallocating memory.
 
@@ -425,4 +368,83 @@ Ultimately, no one algorithm stands out as being the best.  Instead, each algori
 
 \bibliographystyle{plain}
 \bibliography{sources}
+
+\newpage
+\appendix
+\section{Appendix A - Additional Plots}
+
+\begin{figure}[h]
+	\centering
+	\begin{subfigure}[b]{0.3\textwidth}
+	\centering
+	\includegraphics[scale=0.2]{{{../results-usable-clus/oblong.truth}}}
+	\caption{Ground truth}
+	\label{fig:expected-oblong}
+	\end{subfigure}%	
+	\begin{subfigure}[b]{0.3\textwidth}
+	\centering
+	\includegraphics[scale=0.2]{{{../results-usable-clus/oblong.kmeans}}}
+	\caption{$k$-means}
+	\label{fig:kmeans-oblong}
+	\end{subfigure}%
+	\begin{subfigure}[b]{0.3\textwidth}
+	\centering
+	\includegraphics[scale=0.2]{{{../results-usable-clus/oblong.kmedoids}}}
+	\caption{PAM}
+	\label{fig:kmedoids-oblong}
+	\end{subfigure}	
+	\begin{subfigure}[b]{0.3\textwidth}
+	\centering
+	\includegraphics[scale=0.2]{{{../results-usable-clus/oblong.dbscan}}}
+	\caption{DBSCAN}
+	\label{fig:dbscan-oblong}
+	\end{subfigure}%
+	\begin{subfigure}[b]{0.3\textwidth}
+	\centering
+	\includegraphics[scale=0.2]{{{../results-usable-clus/oblong.cmeans}}}
+	\caption{EM}
+	\label{fig:cmeans-oblong}
+	\end{subfigure}
+\caption{Clustering results on two oblong clusters.}
+\label{fig:oblong}
+\end{figure}
+
+\begin{figure}[h]
+	\centering
+	\begin{subfigure}[b]{\textwidth}
+	\centering
+	\includegraphics[scale=0.3]{{{../neeraj-plots/Actual}}}
+	\caption{Original data}
+	\label{fig:expected-clusters}
+	\end{subfigure}
+	
+	\begin{subfigure}[b]{0.5\textwidth}
+	\centering
+	\includegraphics[scale=0.3]{{{../neeraj-plots/Kmeans}}}
+	\caption{$k$-means.}
+	\label{fig:kmeans-clusters}
+	\end{subfigure}%
+	\begin{subfigure}[b]{0.5\textwidth}
+	\centering
+	\includegraphics[scale=0.3]{{{../neeraj-plots/Kmedoids}}}
+	\caption{PAM}
+	\label{fig:kmedoids-clusters}
+	\end{subfigure}
+	
+	\begin{subfigure}[b]{0.5\textwidth}
+	\centering
+	\includegraphics[scale=0.3]{{{../neeraj-plots/Dbscan}}}
+	\caption{DBSCAN}
+	\label{fig:dbscan-clusters}
+	\end{subfigure}%
+	\begin{subfigure}[b]{0.5\textwidth}
+	\centering
+	\includegraphics[scale=0.3]{{{../neeraj-plots/Cmeans}}}
+	\caption{EM}
+	\label{fig:em-clusters}
+	\end{subfigure}
+	
+	\caption{Clustering results from an earlier version of the data generator.}
+	\label{fig:cluster-assignments}
+\end{figure}
 \end{document}

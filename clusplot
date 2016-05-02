@@ -4,6 +4,7 @@ clusfile="${1}.${2}"
 statfile="${1}.${2}.stats"
 # extract title from the first line of the cluster file in the form "# TITLE(...)"
 title=$(sed '1q;d' $clusfile | tr '()' ' ' | awk '{ print $2 }')
+bcubed=($(sed '2q;d' $statfile))
 silhouette=($(sed '5q;d' $statfile))
 gnuplot -p <<- EOP
     # terminal
@@ -25,21 +26,18 @@ gnuplot -p <<- EOP
     unset colorbox
         
     # title and axes
-    set title 'Clusters - ${title}' font 'sans, 24'
-    unset xlabel
+    #set title 'Clusters - ${title}' font 'sans, 24'
+    set xlabel sprintf("Pr: %5.3f   Rc: %5.3f   Sl: %5.3f", ${bcubed[1]}, ${bcubed[2]}, ${silhouette[3]}) font 'sans, 36'
+    #unset xlabel
     set xrange [-1:1]
-    set xtics font 'sans, 16'
+    set xtics 2,2
     unset ylabel
     set yrange [-1:1]
-    set ytics font 'sans, 16'
+    unset ytics
     
     # styles
     set style line 1 linecolor palette pointtype 7 pointsize 1.2
     
     # plot
-    # set label "Compactness: ${silhouette[1]}" at -0.98, -0.87 font 'monospace, 9'
-    # set label " Separation: ${silhouette[2]}" at -0.35, -0.87 font 'monospace, 9'
-    # set label "      Noise: ${silhouette[0]}" at -0.98, -0.93 font 'monospace, 9'
-    # set label " Silhouette: ${silhouette[3]}" at -0.35, -0.93 font 'monospace, 9'
     plot '< paste ${datafile} ${clusfile}' using 2:3:5 with points notitle ls 1;
 EOP
