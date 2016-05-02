@@ -4,3 +4,8 @@ doc/
 .project
 .classpath
 .settings
+
+#ignore tex crud
+report/report.*
+!report/*.tex
+!report/*.bib
